@@ -49,7 +49,7 @@ The Python version found is shown in the configure output, e.g. `Adding CHOP sam
 
 ### CUDA (Windows only)
 
-The CUDA samples need a CUDA 13 toolkit, the CUDA version TouchDesigner uses: the plugins link the shared CUDA runtime, and TouchDesigner only ships `cudart64_13.dll`. If several toolkits are installed, CMake picks the newest 13.x automatically, and it reports a toolkit of another major version instead of building with it. To choose one yourself, pass `-DCMAKE_CUDA_COMPILER=<path to nvcc.exe>`, or `-T cuda=13.0` with the Visual Studio generator, in a fresh build folder.
+The CUDA samples need a CUDA 13 toolkit, the CUDA version TouchDesigner uses: each CUDA major version links its own runtime (with CUDA 13 on Windows, the one in the NVIDIA display driver), so a plugin built with CUDA 12 would need `cudart64_12.dll`, which TouchDesigner 2026 series builds don't ship. If several toolkits are installed, CMake picks the newest 13.x automatically, and it reports a toolkit of another major version instead of building with it. To choose one yourself, pass `-DCMAKE_CUDA_COMPILER=<path to nvcc.exe>`, or `-T cuda=13.0` with the Visual Studio generator, in a fresh build folder.
 
 CUDA 13 supports GPUs from the Turing generation (GeForce GTX 16 / RTX 20 series) and newer, so the CUDA samples are compiled for Turing through Blackwell and won't run on older NVIDIA GPUs.
 

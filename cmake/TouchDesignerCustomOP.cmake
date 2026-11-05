@@ -807,9 +807,20 @@ function(td_add_custom_op target)
 	endif()
 
 	if(ARG_CUDA)
+		# The CUDA runtime is linked explicitly through CUDA::cudart (cudart.lib),
+		# the dynamic runtime. From CUDA 13, nvcc on Windows names that mode
+		# "hybrid" (cudart.lib now binds to the runtime in the display driver,
+		# nvcudart_hybrid64.dll) and warns that "shared" is deprecated. CMake
+		# has no value for "hybrid", so nvcc is told -cudart=none and the same
+		# library is linked by the line below; CUDA 12 keeps "shared".
+		if(TD_CUDA_MAJOR_VERSION VERSION_GREATER_EQUAL 13)
+			set(cuda_runtime None)
+		else()
+			set(cuda_runtime Shared)
+		endif()
 		set_target_properties(${target} PROPERTIES
 			CUDA_STANDARD 17
-			CUDA_RUNTIME_LIBRARY Shared)
+			CUDA_RUNTIME_LIBRARY ${cuda_runtime})
 		target_link_libraries(${target} PRIVATE CUDA::cudart)
 		if(TD_CUDA_ALLOW_UNSUPPORTED_COMPILER)
 			target_compile_definitions(${target} PRIVATE _ALLOW_COMPILER_AND_STL_VERSION_MISMATCH)

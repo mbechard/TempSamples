@@ -15,11 +15,13 @@
 
 include_guard(GLOBAL)
 
-# CUDA major version TouchDesigner is built with. TouchDesigner only ships the
-# CUDA runtime DLL of this major version (cudart64_13.dll), and the plugins link
-# the shared runtime, so they must be built with a toolkit of the same major
-# version or they fail to load. Not a cache option on purpose: update it here
-# when TouchDesigner moves to a new CUDA major version.
+# CUDA major version TouchDesigner is built with. Plugins must be built with a
+# toolkit of the same major version: each major version links its own CUDA
+# runtime (CUDA 12: cudart64_12.dll; CUDA 13 on Windows: the runtime in the
+# NVIDIA display driver, nvcudart_hybrid64.dll), and a plugin linked against
+# another version's runtime either fails to load or doesn't match what
+# TouchDesigner uses. Not a cache option on purpose: update it here when
+# TouchDesigner moves to a new CUDA major version.
 set(TD_CUDA_MAJOR_VERSION 13)
 
 # TouchDesigner only supports CUDA on Windows.
