@@ -173,7 +173,7 @@ CPlusPlusCHOPExample::execute(CHOP_Output* output,
 				{
 					case ExampleSequenceBlockEntries::SequenceFloat:
 					{
-						floatParValue = inputs->getParDouble(parName);
+						floatParValue = (float)inputs->getParDouble(parName);
 						break;
 					}
 					case ExampleSequenceBlockEntries::SequenceInt:
