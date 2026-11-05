@@ -1,0 +1,10 @@
+# CMake build folders
+build/
+build-*/
+
+# Visual Studio / Xcode user state
+.vs/
+*.vcxproj.user
+*.xcworkspace/xcuserdata/
+xcuserdata/
+.DS_Store
