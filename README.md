@@ -29,7 +29,7 @@ The built plugins (`.dll` on Windows, `.plugin` bundles on macOS) are written to
 
 ## TouchDesigner installation
 
-Python and the debugger executable are taken from the TouchDesigner installation set by `TD_INSTALLATION_PATH`. If TouchDesigner is in its default location you don't need to set it:
+These samples need a TouchDesigner 2026 or later series build, which uses CUDA 13 and ships OpenCV 5. Python and the debugger executable are taken from the TouchDesigner installation set by `TD_INSTALLATION_PATH`. If TouchDesigner is in its default location you don't need to set it:
 
 * Windows: the install folder, default `C:/Program Files/Derivative/TouchDesigner`
 * macOS: the application bundle, default `/Applications/TouchDesigner.app`
