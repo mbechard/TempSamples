@@ -1,0 +1,2 @@
+﻿  VulkanTexturePanelCOMP.cpp
+C:\dev\dev_malcolm6\src\touch\tfs\special\CPlusPlus\VulkanTexturePanelCOMP\VulkanTexturePanelCOMP.cpp(417,19): error C3861: 'PyList_New': identifier not found

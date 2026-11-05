@@ -1,0 +1,22 @@
+{
+    "version": 1,
+    "revision": 0,
+    "rules": [
+        {
+            "primary-output": "VulkanTexturePanelCOMP.dir\\Debug\\VulkanTexturePanelCOMP.obj",
+            "outputs": [
+                "VulkanTexturePanelCOMP.dir\\Debug\\VulkanTexturePanelCOMP.h_72D45B857FB55526.ifc.dt.module.json",
+                "VulkanTexturePanelCOMP.dir\\Debug\\VulkanTexturePanelCOMP.h_72D45B857FB55526.ifc.dt.d.json",
+                "VulkanTexturePanelCOMP.dir\\Debug\\VulkanTexturePanelCOMP.h.ifc"
+            ],
+            "provides": [
+                {
+                    "logical-name": "C:\\dev\\dev_malcolm6\\src\\touch\\tfs\\special\\CPlusPlus\\VulkanTexturePanelCOMP\\VulkanTexturePanelCOMP.h",
+                    "source-path": "c:\\dev\\dev_malcolm6\\src\\touch\\tfs\\special\\cplusplus\\vulkantexturepanelcomp\\vulkantexturepanelcomp.h",
+                    "lookup-method": "absolute"
+                }
+            ],
+            "requires": []
+        }
+    ]
+}

@@ -1,0 +1,10 @@
+^C:\DEV\DEV_MALCOLM6\SRC\TOUCH\TFS\SPECIAL\CPLUSPLUS\VULKANTEXTUREPANELCOMP\CMAKELISTS.TXT
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SC:/dev/dev_malcolm6/src/touch/tfs/special/CPlusPlus/VulkanTexturePanelCOMP -BC:/dev/dev_malcolm6/src/touch/tfs/special/CPlusPlus/VulkanTexturePanelCOMP/Build --check-stamp-file C:/dev/dev_malcolm6/src/touch/tfs/special/CPlusPlus/VulkanTexturePanelCOMP/Build/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

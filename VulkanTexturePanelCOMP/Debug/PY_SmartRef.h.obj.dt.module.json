@@ -1,0 +1,14 @@
+{
+    "version": 1,
+    "revision": 0,
+    "rules": [
+        {
+            "primary-output": "Debug\\PY_SmartRef.obj",
+            "outputs": [
+                "Debug\\PY_SmartRef.h.obj.dt.module.json",
+                "Debug\\PY_SmartRef.h.obj.dt.d.json"
+            ],
+            "requires": []
+        }
+    ]
+}

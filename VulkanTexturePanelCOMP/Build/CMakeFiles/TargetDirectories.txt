@@ -1,0 +1,4 @@
+C:/dev/dev_malcolm6/src/touch/tfs/special/CPlusPlus/VulkanTexturePanelCOMP/Build/CMakeFiles/VulkanTexturePanelCOMP.dir
+C:/dev/dev_malcolm6/src/touch/tfs/special/CPlusPlus/VulkanTexturePanelCOMP/Build/CMakeFiles/INSTALL.dir
+C:/dev/dev_malcolm6/src/touch/tfs/special/CPlusPlus/VulkanTexturePanelCOMP/Build/CMakeFiles/ALL_BUILD.dir
+C:/dev/dev_malcolm6/src/touch/tfs/special/CPlusPlus/VulkanTexturePanelCOMP/Build/CMakeFiles/ZERO_CHECK.dir

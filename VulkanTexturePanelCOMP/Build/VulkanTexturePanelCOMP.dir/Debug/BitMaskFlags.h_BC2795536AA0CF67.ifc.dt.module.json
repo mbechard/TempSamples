@@ -1,0 +1,22 @@
+{
+    "version": 1,
+    "revision": 0,
+    "rules": [
+        {
+            "primary-output": "VulkanTexturePanelCOMP.dir\\Debug\\BitMaskFlags.obj",
+            "outputs": [
+                "VulkanTexturePanelCOMP.dir\\Debug\\BitMaskFlags.h_BC2795536AA0CF67.ifc.dt.module.json",
+                "VulkanTexturePanelCOMP.dir\\Debug\\BitMaskFlags.h_BC2795536AA0CF67.ifc.dt.d.json",
+                "VulkanTexturePanelCOMP.dir\\Debug\\BitMaskFlags.h.ifc"
+            ],
+            "provides": [
+                {
+                    "logical-name": "C:\\dev\\dev_malcolm6\\src\\touch\\tfs\\special\\CPlusPlus\\VulkanTexturePanelCOMP\\include\\BitMaskFlags.h",
+                    "source-path": "c:\\dev\\dev_malcolm6\\src\\touch\\tfs\\special\\cplusplus\\vulkantexturepanelcomp\\include\\bitmaskflags.h",
+                    "lookup-method": "absolute"
+                }
+            ],
+            "requires": []
+        }
+    ]
+}
