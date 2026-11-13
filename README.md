@@ -1,4 +1,4 @@
-# TempSamples
+# CPlusPlusSamples
 
 TouchDesigner custom operator samples, built with [CMake](https://cmake.org/) 4.4 or newer. CMake generates Visual Studio solutions on Windows and Xcode projects (or Makefiles) on macOS from the same `CMakeLists.txt` files. The shared build logic lives in `cmake/` and is the same as in [CustomOperatorSamples](https://github.com/TouchDesigner/CustomOperatorSamples).
 

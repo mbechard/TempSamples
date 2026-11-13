@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 4.4)
 
 # Before project(): macOS deployment target and CUDA Toolkit selection.
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/TouchDesignerPreProject.cmake)
-project(TempSamples LANGUAGES CXX)
+project(CPlusPlusSamples LANGUAGES CXX)
 
 # Builds every sample as one project/solution.
 #
@@ -24,8 +24,14 @@ td_enable_cuda()
 add_subdirectory(CHOP)
 add_subdirectory(CHOPWithPythonClass)
 add_subdirectory(CPUMemoryTOP)
-add_subdirectory(CudaPOP)
-add_subdirectory(CudaTOP)
+if(WIN32)
+	add_subdirectory(CudaPOP)
+	add_subdirectory(CudaTOP)
+endif()
+if(APPLE)
+	add_subdirectory(MetalPOP)
+	add_subdirectory(MetalTOP)
+endif()
 add_subdirectory(DAT)
 add_subdirectory(SimpleShapesPOP)
 add_subdirectory(SimpleShapesSOP)

@@ -53,18 +53,6 @@ class POP_CPlusPlusBase;
 // the new API requirements
 const int POPCPlusPlusAPIVersion = 2 | (OP_CommonAPIVersion << 16);
 
-enum class POP_GPUAPI : uint32_t
-{
-	CUDA,
-	Metal
-};
-
-#ifdef _WIN32
-const POP_GPUAPI DefaultGPUAPI = POP_GPUAPI::CUDA;
-#else
-const POP_GPUAPI DefaultGPUAPI = POP_GPUAPI::Metal;
-#endif
-
 class POP_PluginInfo
 {
 private:
@@ -105,7 +93,7 @@ public:
 	// this API workflow.
 	// Buffers can still be obtained and provided via CPU buffers
 	// in all cases though
-	POP_GPUAPI		gpuAPI = DefaultGPUAPI;
+	OP_DeviceAPI		deviceAPI = DefaultDeviceAPI;
 
 	int32_t			reserved[197] = {};
 
@@ -213,6 +201,29 @@ private:
 	int32_t			reserved[30] = {};
 };
 
+class POP_VulkanCommandRecorder : public OP_RefCount
+{
+public:
+	~POP_VulkanCommandRecorder()
+	{
+	}
+
+	virtual void	recordCommands(const OP_VulkanCommandRecordInfo* info, void* reserved1) = 0;
+
+private:
+	virtual int32_t	reservedFunc0() { return 0; }
+	virtual int32_t	reservedFunc1() { return 0; }
+	virtual int32_t	reservedFunc2() { return 0; }
+	virtual int32_t	reservedFunc3() { return 0; }
+	virtual int32_t	reservedFunc4() { return 0; }
+	virtual int32_t	reservedFunc5() { return 0; }
+	virtual int32_t	reservedFunc6() { return 0; }
+	virtual int32_t	reservedFunc7() { return 0; }
+	virtual int32_t	reservedFunc8() { return 0; }
+	virtual int32_t	reservedFunc9() { return 0; }
+
+	int32_t reserved[100] = {};
+};
 class POP_Output
 {
 public:
@@ -235,11 +246,14 @@ public:
 	// You must call this if you are going to commit a Metal command buffer.
 	// Call this after all of the calls getting inputs, and after allocating your outputs via createBuffer() calls.
 	// It is safe to record and commit your command buffer in another thread once you've called this.
-	// If you call this function you *must* at least call addSignalSyncs() on a command buffer
-	// and commit it, as well as call allCommandsCommitted() once you've committed the command buffer(s).
-	// Call addWaitSyncs() before any commands that use the input buffers.
+	// The returned OP_MetalOperationSync class is used to synchronize your metal command buffer with TouchDesigners
+	// command buffers.
+	// If you call this function you *must* at least call OP_MetalOperationSync::addSignalSyncs() on a command buffer
+	// and commit it, as well as call OP_MetalOperationSync::allCommandsCommitted() once you've committed the command buffer(s).
+	// Call OP_MetalOperationSync::addWaitSyncs() before any commands that use the input buffers.
 	virtual OP_SmartRef<OP_MetalOperationSync>		finalizeMetalResources(void* reserved) = 0;
 
+	virtual void									addVulkanCommandRecorder(OP_SmartRef<POP_VulkanCommandRecorder>&& recorder) = 0;
 private:
 
 	int32_t reserved[20] = {};
@@ -434,7 +448,7 @@ static_assert(sizeof(POP_GeneralInfo) == 84, "Incorrect Size");
 // Layout checks for the remaining classes and their public members.
 // Private members are covered by the sizeof() checks.
 
-static_assert(offsetof(POP_PluginInfo, gpuAPI) == 464, "Incorrect Alignment");
+static_assert(offsetof(POP_PluginInfo, deviceAPI) == 464, "Incorrect Alignment");
 
 static_assert(sizeof(POP_Context) == 1008, "Incorrect Size");
 

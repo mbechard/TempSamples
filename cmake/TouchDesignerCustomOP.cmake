@@ -111,14 +111,24 @@ endif()
 # samples move to a TouchDesigner build with a new OpenCV major version.
 set(TD_OPENCV_MAJOR_VERSION 5)
 
-# TouchDesigner build series these samples target (the series that ships
-# CUDA ${TD_CUDA_MAJOR_VERSION} and OpenCV ${TD_OPENCV_MAJOR_VERSION}). Only used in messages that tell people
-# which installation to point TD_INSTALLATION_PATH at.
-set(TD_BUILD_SERIES 2026)
+# Python version the TouchDesigner build ships (major.minor), and whether it is
+# the free-threaded build (3.14t etc.). Samples using Python (td_add_custom_op's
+# PYTHON option) are built against the Python in the installation, and
+# configuring stops if that isn't this version, which catches TD_INSTALLATION_PATH
+# pointing at another series. Not a cache option on purpose: update it here
+# when the samples move to a TouchDesigner build with a new Python.
+set(TD_PYTHON_VERSION "3.14")
+set(TD_PYTHON_FREE_THREADED TRUE)
+
+# TouchDesigner build series these samples target (the series that ships the
+# CUDA, OpenCV and Python versions above), as it reads in messages:
+# "the latest TouchDesigner <series> series build". Only used in messages that
+# tell people which installation to point TD_INSTALLATION_PATH at.
+set(TD_BUILD_SERIES "2026 or later")
 if(APPLE)
-	set(_td_installation_hint "Set TD_INSTALLATION_PATH to the TouchDesigner.app of the latest TouchDesigner ${TD_BUILD_SERIES} or later series build.")
+	set(_td_installation_hint "Set TD_INSTALLATION_PATH to the TouchDesigner.app of the latest TouchDesigner ${TD_BUILD_SERIES} series build.")
 else()
-	set(_td_installation_hint "Set TD_INSTALLATION_PATH to the installation folder of the latest TouchDesigner ${TD_BUILD_SERIES} or later series build.")
+	set(_td_installation_hint "Set TD_INSTALLATION_PATH to the installation folder of the latest TouchDesigner ${TD_BUILD_SERIES} series build.")
 endif()
 
 # TD_INSTALLATION_PATH is the one setting for where TouchDesigner is installed;
@@ -199,6 +209,14 @@ if(APPLE)
 	enable_language(OBJCXX)
 endif()
 
+# Xcode: a scheme for every target, including ALL_BUILD, install and
+# ZERO_CHECK, and each plugin (so Product > Archive can be run on one plugin).
+# This has to be all or nothing: as soon as CMake generates any scheme, it
+# turns off Xcode's automatic scheme creation for the project, which is the
+# only other way ALL_BUILD and install would get one. Set here (the top-level
+# scope in the all-samples build) so the built-in targets see it too.
+set(CMAKE_XCODE_GENERATE_SCHEME ON)
+
 # ----------------------------------------------------------------------------
 # td_enable_cuda()
 #
@@ -232,6 +250,24 @@ macro(td_enable_cuda)
 	if(NOT WIN32)
 		# TouchDesigner only supports CUDA on Windows.
 		set(TD_CUDA_AVAILABLE FALSE)
+	elseif(NOT TD_BUILD_CUDA_SAMPLES)
+		# Turned off (see TouchDesignerCUDAToolkit.cmake): CUDA is never enabled,
+		# so no project in the solution gets the CUDA build customization.
+		set(TD_CUDA_AVAILABLE FALSE)
+		set(TD_CUDA_ERROR "the CUDA samples are turned off (TD_BUILD_CUDA_SAMPLES is OFF)")
+	elseif(TD_CUDA_MAJOR_VERSION VERSION_LESS 13
+			AND (CMAKE_GENERATOR MATCHES "^Visual Studio 18 " OR (MSVC AND MSVC_VERSION GREATER_EQUAL 1950)))
+		# CUDA 12 doesn't support Visual Studio 2026: its nvcc doesn't accept
+		# the VS 2026 compiler (MSVC 19.50+, toolset v145), and its Visual Studio
+		# integration only installs into VS 2022. Checked before CUDA is enabled,
+		# so this combination never gets as far as a failing compiler test.
+		set(TD_CUDA_AVAILABLE FALSE)
+		if(CMAKE_GENERATOR MATCHES "^Visual Studio 18 ")
+			set(_td_cuda_vs_found "the ${CMAKE_GENERATOR} generator")
+		else()
+			set(_td_cuda_vs_found "the Visual Studio 2026 compiler (MSVC_VERSION ${MSVC_VERSION})")
+		endif()
+		set(TD_CUDA_ERROR "CUDA ${TD_CUDA_MAJOR_VERSION}, which TouchDesigner ${TD_BUILD_SERIES} series builds use, doesn't support Visual Studio 2026, but this build uses ${_td_cuda_vs_found}. Build the CUDA samples with Visual Studio 2022: configure a fresh build folder with -G \"Visual Studio 17 2022\", or use Ninja from a Visual Studio 2022 developer prompt.")
 	else()
 		# check_language() caches CMAKE_CUDA_COMPILER, so it only does work on
 		# the first configure. enable_language() below must still run on every
@@ -277,11 +313,20 @@ macro(td_enable_cuda)
 				endif()
 			endif()
 			if(NOT TD_CUDA_AVAILABLE)
-				set(TD_CUDA_ERROR "found CUDA ${_td_cuda_found_version}, but TouchDesigner ${TD_BUILD_SERIES} or later series builds use CUDA ${TD_CUDA_MAJOR_VERSION}.x and only ship that runtime. Install a CUDA ${TD_CUDA_MAJOR_VERSION}.x toolkit and select it in a fresh build folder with -DCMAKE_CUDA_COMPILER=<path to its nvcc> (Visual Studio generator: -T cuda=${TD_CUDA_MAJOR_VERSION}.x)")
+				set(TD_CUDA_ERROR "found CUDA ${_td_cuda_found_version}, but TouchDesigner ${TD_BUILD_SERIES} series builds use CUDA ${TD_CUDA_MAJOR_VERSION}.x and only ship that runtime. Install a CUDA ${TD_CUDA_MAJOR_VERSION}.x toolkit and select it in a fresh build folder with -DCMAKE_CUDA_COMPILER=<path to its nvcc> (Visual Studio generator: -T cuda=${TD_CUDA_MAJOR_VERSION}.x)")
 			endif()
 		else()
 			set(TD_CUDA_AVAILABLE FALSE)
 		endif()
+	endif()
+
+	# Visual Studio 2026: CUDA's build customization is imported into every
+	# project of the solution, and can make IntelliSense fail for all of them.
+	get_property(_td_cuda_vs_note GLOBAL PROPERTY _TD_CUDA_VS2026_NOTE)
+	if(TD_CUDA_AVAILABLE AND TD_CUSTOM_OPS_ROOT_BUILD AND NOT _td_cuda_vs_note
+			AND CMAKE_GENERATOR MATCHES "^Visual Studio 18 ")
+		set_property(GLOBAL PROPERTY _TD_CUDA_VS2026_NOTE TRUE)
+		message(NOTICE "Note: CUDA is enabled for this ${CMAKE_GENERATOR} solution, so CMake adds the CUDA build customization to every project in it. If Visual Studio reports \"Designtime build failed\" (IntelliSense unavailable) for all projects, configure this build folder with -DTD_BUILD_CUDA_SAMPLES=OFF, and build the CUDA samples in a build folder of their own, configured from the sample's folder.")
 	endif()
 endmacro()
 
@@ -362,7 +407,7 @@ function(_td_find_opencv prefix)
 				list(GET cv_version 2 cv_revision)
 				if(NOT cv_major STREQUAL TD_OPENCV_MAJOR_VERSION)
 					set(no_fallback TRUE)
-					set(error "TouchDesigner in '${TD_INSTALLATION_PATH}' ships OpenCV ${cv_version_string}, but these samples are looking for OpenCV ${TD_OPENCV_MAJOR_VERSION}.x, which ships with TouchDesigner ${TD_BUILD_SERIES} or later series builds. ${_td_installation_hint} ")
+					set(error "TouchDesigner in '${TD_INSTALLATION_PATH}' ships OpenCV ${cv_version_string}, but these samples are looking for OpenCV ${TD_OPENCV_MAJOR_VERSION}.x, which ships with TouchDesigner ${TD_BUILD_SERIES} series builds. ${_td_installation_hint} ")
 				else()
 					set(found TRUE)
 					set(bundled TRUE)
@@ -437,8 +482,11 @@ endfunction()
 # ----------------------------------------------------------------------------
 # Internal: locate TouchDesigner's Python, to build against the interpreter the
 # plugin is loaded into.
-#   Windows: headers in <TD_INSTALLATION_PATH>/bin/include,
+#   Windows, 2026 series builds: headers in <TD_INSTALLATION_PATH>/bin/include,
 #            import library in <TD_INSTALLATION_PATH>/bin/libs
+#   Windows, 2025 series builds: headers in Samples/CPlusPlus/3rdParty/Python/Include
+#            and Include/PC (pyconfig.h, as in a CPython source tree),
+#            import library in Samples/CPlusPlus/3rdParty/Python/lib/x64
 #   macOS:   <TD_INSTALLATION_PATH>/Contents/Frameworks/Python.framework
 # Sets <prefix>_FOUND, <prefix>_INCLUDE_DIRS, <prefix>_LIBRARIES,
 # <prefix>_LIBRARY_DIRS, <prefix>_DEFINITIONS, <prefix>_VERSION (e.g. 3.14),
@@ -454,11 +502,17 @@ function(_td_find_python prefix)
 	set(free_threaded FALSE)
 	set(error "")
 
-	# Header folder candidates.
+	# Header folder candidates, each paired with its import library folder
+	# (Windows only).
 	set(inc_candidates "")
+	set(lib_dirs_for "")
 	if(WIN32)
-		set(inc_candidates "${TD_INSTALLATION_PATH}/bin/include")
-		set(lib_dir "${TD_INSTALLATION_PATH}/bin/libs")
+		# 2026 series layout.
+		list(APPEND inc_candidates "${TD_INSTALLATION_PATH}/bin/include")
+		list(APPEND lib_dirs_for "${TD_INSTALLATION_PATH}/bin/libs")
+		# 2025 series layout.
+		list(APPEND inc_candidates "${TD_3RDPARTY_PATH}/Python/Include")
+		list(APPEND lib_dirs_for "${TD_3RDPARTY_PATH}/Python/lib/x64")
 	elseif(APPLE)
 		set(framework "${TD_FRAMEWORKS_PATH}/Python.framework")
 		# Headers is a symlink to Versions/Current/Headers in a standard framework;
@@ -471,11 +525,17 @@ function(_td_find_python prefix)
 	endif()
 
 	set(inc "")
+	set(lib_dir "")
+	set(index 0)
 	foreach(dir IN LISTS inc_candidates)
 		if(EXISTS "${dir}/Python.h" AND EXISTS "${dir}/patchlevel.h")
 			set(inc "${dir}")
+			if(lib_dirs_for)
+				list(GET lib_dirs_for ${index} lib_dir)
+			endif()
 			break()
 		endif()
+		math(EXPR index "${index} + 1")
 	endforeach()
 
 	if(inc)
@@ -496,9 +556,22 @@ function(_td_find_python prefix)
 		endif()
 	elseif(NOT error)
 		if(WIN32)
-			set(error "TouchDesigner's Python headers were not found in '${TD_INSTALLATION_PATH}/bin/include'. ${_td_installation_hint}")
+			set(error "TouchDesigner's Python headers were not found in '${TD_INSTALLATION_PATH}/bin/include' or '${TD_3RDPARTY_PATH}/Python/Include'. ${_td_installation_hint}")
 		else()
 			set(error "TouchDesigner's Python.framework was not found in '${TD_FRAMEWORKS_PATH}'. ${_td_installation_hint}")
+		endif()
+	endif()
+
+	# 2025 series builds keep pyconfig.h in Include/PC, as in a CPython source
+	# tree, so that folder is needed on the include path as well. (2026 series
+	# builds have it next to Python.h.)
+	set(extra_incs "")
+	if(version AND WIN32 AND inc STREQUAL "${TD_3RDPARTY_PATH}/Python/Include")
+		if(EXISTS "${inc}/PC/pyconfig.h")
+			list(APPEND extra_incs "${inc}/PC")
+		else()
+			set(error "TouchDesigner's Python pyconfig.h was not found in '${inc}/PC'. ${_td_installation_hint}")
+			set(version "")
 		endif()
 	endif()
 
@@ -529,7 +602,7 @@ function(_td_find_python prefix)
 		endforeach()
 		if(lib)
 			set(found TRUE)
-			set(includes "${inc}")
+			set(includes "${inc}" ${extra_incs})
 			set(libs "${lib}")
 			# pyconfig.h may auto-link a library with #pragma comment(lib); the
 			# folder is on the link path so that resolves to the same library,
@@ -556,6 +629,23 @@ function(_td_find_python prefix)
 			if(gil)
 				set(free_threaded TRUE)
 			endif()
+		endif()
+	endif()
+
+	# The installation's Python must be the one these samples target; "t" marks
+	# the free-threaded build, e.g. 3.14t.
+	if(found)
+		set(found_label "${version}")
+		if(free_threaded)
+			string(APPEND found_label "t")
+		endif()
+		set(expected_label "${TD_PYTHON_VERSION}")
+		if(TD_PYTHON_FREE_THREADED)
+			string(APPEND expected_label "t")
+		endif()
+		if(NOT found_label STREQUAL expected_label)
+			set(found FALSE)
+			set(error "TouchDesigner in '${TD_INSTALLATION_PATH}' ships Python ${found_label}, but these samples are looking for Python ${expected_label}, which ships with TouchDesigner ${TD_BUILD_SERIES} series builds. ${_td_installation_hint}")
 		endif()
 	endif()
 
@@ -639,6 +729,15 @@ function(td_add_custom_op target)
 
 	if(ARG_WINDOWS_ONLY AND NOT WIN32)
 		list(APPEND missing "this sample only builds on Windows")
+	endif()
+
+	# CUDA samples turned off on purpose: in the all-samples build that's not a
+	# problem to warn about. (Configuring the sample on its own with the option
+	# off still stops, via the CUDA check below.)
+	if(ARG_CUDA AND NOT missing AND NOT TD_BUILD_CUDA_SAMPLES AND TD_CUSTOM_OPS_ROOT_BUILD)
+		message(STATUS "Skipping ${target}: the CUDA samples are turned off (TD_BUILD_CUDA_SAMPLES is OFF)")
+		set_property(GLOBAL APPEND PROPERTY TD_SKIPPED_SAMPLES "${target}")
+		return()
 	endif()
 
 	if(ARG_CUDA AND NOT missing)
@@ -746,9 +845,7 @@ function(td_add_custom_op target)
 			# archive, and puts them at Products/$(INSTALL_PATH); bundle targets
 			# default to SKIP_INSTALL=YES, which leaves the archive empty.
 			XCODE_ATTRIBUTE_SKIP_INSTALL NO
-			XCODE_ATTRIBUTE_INSTALL_PATH "/"
-			# Own scheme, so Archive can be run on this target rather than ALL_BUILD.
-			XCODE_GENERATE_SCHEME TRUE)
+			XCODE_ATTRIBUTE_INSTALL_PATH "/")
 
 		# Newer TouchDesigner headers `#import <Metal/Metal.h>` and use
 		# id<MTL...> types on macOS, so the sources must be Objective-C++.

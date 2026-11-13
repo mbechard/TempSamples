@@ -376,6 +376,19 @@ enum class OP_TexDim : int32_t
 	eCube,
 };
 
+enum class OP_DeviceAPI : uint32_t
+{
+	CUDA,
+	Metal,
+	Vulkan
+};
+
+#ifdef _WIN32
+	const OP_DeviceAPI DefaultDeviceAPI = OP_DeviceAPI::CUDA;
+#else
+	const OP_DeviceAPI DefaultDeviceAPI = OP_DeviceAPI::Metal;
+#endif
+
 enum class OP_WorkingColorSpace : int32_t
 {
 	// There is no working color space, colors are passed around as-is without any conversion.
@@ -384,9 +397,11 @@ enum class OP_WorkingColorSpace : int32_t
 	// All colors provided and held in textures will be in ACEScg gamut (ACES AP1) with linear transfer function.
 	ACEScg,
 
-	// For the below 3 color spaces, RGBA/BGRA 8-bit textures will use a sRGB transfer to store the data,
-	// so accessing the data in shaders etc gives a linearlized version of it.
+	// For the below 3 color spaces, RGBA/BGRA 8-bit textures will use a sRGB transfer to store the data.
+	// So accessing the data in shaders via samplers gives a linearlized version of it, but the data
+	// is stored as non-linear sRGB to hold more details in the darks for 8-bit.
 	// Otherwise it will be linear.
+
 	// All colors provided will be in sRGB gamut with linear transfer function (sRGB for 8-bit textures).
 	// This is the same as Rec.709
 	SRGBLinear,
@@ -535,7 +550,10 @@ public:
 	release() override
 	{
 		if (myRefCount.fetch_sub(1, std::memory_order_acq_rel) == 1)
+		{
+			std::atomic_thread_fence(std::memory_order_acquire);
 			dealloc();
+		}
 	}
 
 protected:
@@ -755,7 +773,6 @@ public:
 		return myTarget;
 	}
 
-
 	T*
 	operator->() const
 	{
@@ -768,7 +785,7 @@ public:
 		return myTarget;
 	}
 
-	operator bool() const
+	explicit operator bool() const
 	{
 		return myTarget != nullptr;
 	}
@@ -790,6 +807,16 @@ private:
 	friend class ::TOP_CPlusPlus;
 	friend class ::POP_CPlusPlus;
 };
+
+enum class OP_OperatingSystemFlagBits : uint32_t
+{
+	Windows = 1 << 0,
+	MacOS	= 1 << 1,
+
+	All = 0xFFFFFFFF
+};
+
+TD_ENABLE_BITMASK_FLAGS(OP_OperatingSystem);
 
 // Used to describe this Plugin so it can be used as a custom OP.
 // Can be filled in as part of the Fill*PluginInfo() callback
@@ -888,7 +915,10 @@ public:
 	// set this to that URL
 	OP_String*		opHelpURL = nullptr;
 
-	int32_t			reserved[85] = {};
+	// Specify the supported operating systems for this plugin.
+	OP_OperatingSystemFlags supportedOS = OP_OperatingSystemFlagBits::All;
+
+	int32_t			reserved[84] = {};
 };
 
 // This class is used to provide direct access to the instance of a Custom OP
@@ -970,7 +1000,7 @@ private:
 class OP_VulkanCommandBuffer : public OP_RefCount
 {
 public:
-	// Gets the underlaying VkCommandBuffer this object holds. The command buffer will
+	// Gets the underlying VkCommandBuffer this object holds. The command buffer will
 	// always have had vkBeginCommandBuffer() called on it.
 	virtual VkCommandBuffer		getHandle(void* reserved1) = 0;
 
@@ -991,17 +1021,6 @@ public:
 	virtual void*	reservedFunc8() = 0;
 	virtual void*	reservedFunc9() = 0;
 };
-
-#if 0
-class OP_VulkanCommandPool : public OP_RefCount
-{
-public:
-	// Returns a new OP_VulkanCommandBuffer that already has vkBeginCommandBuffer() called on it.
-	// Do not end or submit the underlaying VkCommandBuffer yourself, use the submit() function available
-	// in the workflow you are using.
-	virtual OP_SmartRef<OP_VulkanCommandBuffer>	createCommandBuffer(void* reserved1) = 0;
-};
-#endif
 
 class OP_VulkanUtils
 {
@@ -1090,6 +1109,18 @@ protected:
 	virtual void* reservedFunc15() = 0;
 };
 
+class OP_VulkanCommandRecordInfo
+{
+public:
+	// You can hang onto this OP_VulkanCommandBuffer reference beyond the recordCommands call to do things
+	// such as call commandBuffer->waitForCompletion().
+	// However the command buffer itself should not be used anymore after recordCommands()
+	OP_SmartRef<OP_VulkanCommandBuffer>		commandBuffer;
+
+private:
+	int32_t reserved[100] = {};
+};
+
 class OP_MetalInfo
 {
 public:
@@ -1158,6 +1189,15 @@ private:
 	int32_t			reserved[50] = {};
 };
 
+enum class OP_CookCondition : uintptr_t
+{
+	// Cook if the output of the node is being used or viewed.
+	CookIfAsked,
+
+	// Cook even if nothing inside the network is using/viewing the output of the node
+	CookForced,
+};
+
 class OP_Context
 {
 public:
@@ -1194,7 +1234,7 @@ public:
 	// The Metal equivalent is finalizeMetalResources() on TOP_Output / POP_Output.
 	virtual bool	beginCUDAOperations(void* reserved1) = 0;
 	virtual void	endCUDAOperations(void* reserved1) = 0;
-
+	
 	// Call this function if you want `setupParameters()` to be called again to re-setup the parameters.
 	// This allows for adding, removing, modifying custom parameters at runtime.
 	// Usage example in Samples/CPlusPlus/CHOP sample project.
@@ -1213,8 +1253,12 @@ public:
 	// with the Metal instance that TD is using under the hood.
 	virtual OP_MetalUtils*	getMetalUtils(void* reserved1) = 0;
 
+	// Function to request a cook on the Custom OP node
+	// safe to be called from any thread
+	// Multiple calls to requestCook() will not result in multiple cooks in the same frame.
+	virtual void	requestCook(OP_CookCondition cookCondition, void* reserved1) = 0;
+
 protected:
-	virtual void*	reservedFunc4() = 0;
 	virtual void*	reservedFunc5() = 0;
 	virtual void*	reservedFunc6() = 0;
 	virtual void*	reservedFunc7() = 0;
@@ -1849,6 +1893,12 @@ public:
 enum class POP_BufferLocation : uint32_t
 {
 	CPU = 0,
+	Vulkan,
+	// Return the buffer where it currently resides. If it's currently on the CPU
+	// it will return it there, if it's currently on the GPU then it will return it
+	// as a Vulkan buffer.
+	// This is only valid when getting buffers, not for creating them.
+	CPUOrVulkan,
 
 #ifdef _WIN32
 	CUDA = 20,

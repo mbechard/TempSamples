@@ -5,7 +5,7 @@
 # Every sample's CMakeLists.txt (and the root one) includes this first:
 #
 #   cmake_minimum_required(VERSION 4.4)
-#   include(${CMAKE_CURRENT_LIST_DIR}/../cmake/TouchDesignerPreProject.cmake)
+#   include(${CMAKE_CURRENT_LIST_DIR}/<path to repository root>/cmake/TouchDesignerPreProject.cmake)
 #   project(MySample LANGUAGES CXX)
 
 include_guard(GLOBAL)

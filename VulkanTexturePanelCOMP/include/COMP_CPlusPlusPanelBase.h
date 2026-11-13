@@ -520,18 +520,6 @@ private:
 	int32_t reserved[100] = {};
 };
 
-class COMP_VulkanCommandRecordInfo
-{
-public:
-	// You can hang onto this commandBuffer reference beyond the recordCommands call to do things
-	// such as call commandBuffer->waitForCompletion().
-	// However the command buffer itself should not be used anymore after recordCommands()
-	OP_SmartRef<OP_VulkanCommandBuffer>		commandBuffer;
-
-private:
-	int32_t reserved[100] = {};
-};
-
 // You need to create an implemenation of a subclass of COMP_VulkanTextureRenderRecorder that implements
 // recordCommands().
 // The call to this may be deferred to a later time and in another thread,
@@ -544,7 +532,7 @@ public:
 	{
 	}
 
-	virtual void	recordCommands(const COMP_VulkanCommandRecordInfo* info, void* reserved1) = 0;
+	virtual void	recordCommands(const OP_VulkanCommandRecordInfo* info, void* reserved1) = 0;
 
 private:
 	virtual int32_t	reservedFunc0() { return 0; }
