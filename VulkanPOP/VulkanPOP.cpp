@@ -25,6 +25,7 @@
 // (see CMakeLists.txt). Each header defines a uint32_t array.
 #include "TransformPosition.spv.h"
 #include "MakeCube.spv.h"
+#include "MakeCubeIndices.spv.h"
 
 // These functions are basic C function, which the DLL loader can find
 // much easier than finding a C++ Class.
@@ -89,21 +90,12 @@ DestroyPOPInstance(POP_CPlusPlusBase* instance, POP_Context *context)
 };
 
 // The generated cube: 8 shared corner points and 6 quads.
-static constexpr uint32_t kCubePoints = 8;
-static constexpr uint32_t kCubeQuads = 6;
+static constexpr uint32_t CubePoints = 8;
+static constexpr uint32_t CubeQuads = 6;
 
-// Corner i of the unit cube is at (x, y, z) = (bit0, bit1, bit2) mapped to -0.5 / +0.5, so
-//   0(-,-,-) 1(+,-,-) 2(-,+,-) 3(+,+,-) 4(-,-,+) 5(+,-,+) 6(-,+,+) 7(+,+,+)
-// Each quad is counter-clockwise when viewed from outside the cube.
-static const uint32_t kCubeIndices[kCubeQuads * 4] =
-{
-	0, 2, 3, 1,		// -Z
-	4, 5, 7, 6,		// +Z
-	0, 4, 6, 2,		// -X
-	1, 3, 7, 5,		// +X
-	0, 1, 5, 4,		// -Y
-	2, 6, 7, 3,		// +Y
-};
+// Indices of the cube's quads (4 per quad, into the 8 corner points). Written on
+// the GPU by MakeCubeIndices.comp, which holds the index table.
+static constexpr uint32_t CubeIndexCount = CubeQuads * 4;
 
 // Push constants for both shaders. Must match the Params block in
 // shaders/TransformPosition.comp and shaders/MakeCube.comp (20 bytes, no padding).
@@ -118,16 +110,44 @@ struct PositionParams
 static_assert(sizeof(PositionParams) == 20, "PositionParams must match the shaders' push constants");
 
 // Local work group sizes, as declared in the shaders.
-static constexpr uint32_t kTransformGroupSize = 64;
-static constexpr uint32_t kCubeGroupSize = 8;
+static constexpr uint32_t TransformGroupSize = 64;
+static constexpr uint32_t CubeGroupSize = 8;
+static constexpr uint32_t CubeIndicesGroupSize = 24;
 
 // How the input buffers will be used by our commands. TouchDesigner uses this to
 // put the right barrier before them: the copies read them in the transfer stage,
 // the TransformPosition shader reads P and the point info in the compute stage.
-static constexpr VkPipelineStageFlags2 kInputStages = VK_PIPELINE_STAGE_2_TRANSFER_BIT |
-													  VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
-static constexpr VkAccessFlags2 kInputAccess = VK_ACCESS_2_TRANSFER_READ_BIT |
-											   VK_ACCESS_2_SHADER_STORAGE_READ_BIT;
+static constexpr vk::PipelineStageFlags2 InputStages = vk::PipelineStageFlagBits2::eTransfer |
+														vk::PipelineStageFlagBits2::eComputeShader;
+static constexpr vk::AccessFlags2 InputAccess = vk::AccessFlagBits2::eTransferRead |
+												 vk::AccessFlagBits2::eShaderStorageRead;
+
+// How our commands write the output buffers. TouchDesigner uses this to put the
+// right barrier after them: buffer copies write in the transfer stage, the
+// shaders in the compute stage.
+static constexpr vk::PipelineStageFlags2 CopyStages = vk::PipelineStageFlagBits2::eTransfer;
+static constexpr vk::AccessFlags2 CopyAccess = vk::AccessFlagBits2::eTransferWrite;
+static constexpr vk::PipelineStageFlags2 ComputeStages = vk::PipelineStageFlagBits2::eComputeShader;
+static constexpr vk::AccessFlags2 ComputeAccess = vk::AccessFlagBits2::eShaderWrite;
+
+// TouchDesigner's structs hold these as the C types (VkPipelineStageFlags2 etc.).
+static void
+setInputUsage(POP_GetBufferInfo& info)
+{
+	info.dstStageMask  = static_cast<VkPipelineStageFlags2>(InputStages);
+	info.dstAccessMask = static_cast<VkAccessFlags2>(InputAccess);
+}
+
+// For a buffer written by our GPU commands. Buffers filled on the CPU keep the
+// default (no stages), since the masks only apply to device buffers.
+static POP_SetBufferInfo
+writtenBy(vk::PipelineStageFlags2 stages, vk::AccessFlags2 access)
+{
+	POP_SetBufferInfo sinfo;
+	sinfo.srcStageMask  = static_cast<VkPipelineStageFlags2>(stages);
+	sinfo.srcAccessMask = static_cast<VkAccessFlags2>(access);
+	return sinfo;
+}
 
 // ---------------------------------------------------------------------------------
 // Vulkan resources
@@ -157,6 +177,7 @@ public:
 			return;
 		device.destroyPipeline(transformPipeline, nullptr, dl);
 		device.destroyPipeline(cubePipeline, nullptr, dl);
+		device.destroyPipeline(cubeIndicesPipeline, nullptr, dl);
 		device.destroyPipelineLayout(transformLayout, nullptr, dl);
 		device.destroyPipelineLayout(cubeLayout, nullptr, dl);
 		device.destroyDescriptorSetLayout(transformSetLayout, nullptr, dl);
@@ -178,7 +199,8 @@ public:
 		device = vk::Device(info->device);
 
 		// Set layouts: TransformPosition reads src (0), writes dst (1) and reads the
-		// point info (2); MakeCube writes P (0). All storage buffers.
+		// point info (2); MakeCube writes P (0) and MakeCubeIndices the indices (0),
+		// so those two share a layout. All storage buffers.
 		auto makeSetLayout = [&](uint32_t numBindings, vk::DescriptorSetLayout& layout) {
 			vk::DescriptorSetLayoutBinding bindings[3];
 			for (uint32_t i = 0; i < numBindings; i++)
@@ -223,8 +245,9 @@ public:
 			pipeline = r.value;
 			return r.result == vk::Result::eSuccess;
 		};
-		if (!makePipeline(kTransformPositionSpv, sizeof(kTransformPositionSpv), transformLayout, transformPipeline) ||
-			!makePipeline(kMakeCubeSpv, sizeof(kMakeCubeSpv), cubeLayout, cubePipeline))
+		if (!makePipeline(TransformPositionSpv, sizeof(TransformPositionSpv), transformLayout, transformPipeline) ||
+			!makePipeline(MakeCubeSpv, sizeof(MakeCubeSpv), cubeLayout, cubePipeline) ||
+			!makePipeline(MakeCubeIndicesSpv, sizeof(MakeCubeIndicesSpv), cubeLayout, cubeIndicesPipeline))
 		{
 			err = "creating the compute pipelines failed";
 			return false;
@@ -274,6 +297,7 @@ public:
 	vk::PipelineLayout					cubeLayout;
 	vk::Pipeline						transformPipeline;
 	vk::Pipeline						cubePipeline;
+	vk::Pipeline						cubeIndicesPipeline;
 
 private:
 	struct InFlight
@@ -295,7 +319,7 @@ private:
 // it has begun and will submit, and takes care of ordering against the work that
 // produced the inputs and the work that uses the outputs. So there are no barriers
 // or synchronization objects to manage here.
-class VulkanPOPRecorder : public OP_RefCountImpl<POP_VulkanCommandRecorder>
+class VulkanPOPRecorder : public OP_RefCountImpl<OP_VulkanCommandRecorder>
 {
 public:
 	VulkanPOPRecorder(std::shared_ptr<VulkanPOPResources> resources,
@@ -318,11 +342,12 @@ public:
 		myNumPoints = numPoints;
 	}
 
-	// Cube mode: compute the cube's corners into this buffer.
+	// Cube mode: compute the cube's corners and its index buffer into these buffers.
 	void
-	setCube(OP_SmartRef<POP_Buffer> dst)
+	setCube(OP_SmartRef<POP_Buffer> pointsDst, OP_SmartRef<POP_Buffer> indicesDst)
 	{
-		myCubeDst = std::move(dst);
+		myCubeDst = std::move(pointsDst);
+		myCubeIndicesDst = std::move(indicesDst);
 	}
 
 	virtual void
@@ -347,7 +372,7 @@ public:
 
 		// The compute work: the position shader for P, or the cube. Each dispatch
 		// needs a descriptor set; they all come from one pool for this recording.
-		uint32_t numSets = myCubeDst ? 1 : 0;
+		uint32_t numSets = (myCubeDst ? 1 : 0) + (myCubeIndicesDst ? 1 : 0);
 		for (const VulkanPOP::GPUCopy& job : myJobs)
 		{
 			if (job.transformP)
@@ -397,9 +422,9 @@ public:
 			// known on the CPU the shader doesn't read it, so src stands in.
 			const vk::Buffer pointInfo = myGPUPointInfo ? vk::Buffer(myGPUPointInfo->getVkBuffer(nullptr)) : src;
 			vk::DescriptorBufferInfo bufs[3] = {
-				vk::DescriptorBufferInfo(src, 0, VK_WHOLE_SIZE),
-				vk::DescriptorBufferInfo(dst, 0, VK_WHOLE_SIZE),
-				vk::DescriptorBufferInfo(pointInfo, 0, VK_WHOLE_SIZE),
+				vk::DescriptorBufferInfo(src, 0, vk::WholeSize),
+				vk::DescriptorBufferInfo(dst, 0, vk::WholeSize),
+				vk::DescriptorBufferInfo(pointInfo, 0, vk::WholeSize),
 			};
 			vk::WriteDescriptorSet writes[3];
 			for (uint32_t i = 0; i < 3; i++)
@@ -413,26 +438,30 @@ public:
 			cmd.bindPipeline(vk::PipelineBindPoint::eCompute, res.transformPipeline, dl);
 			cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, res.transformLayout, 0, 1, &set, 0, nullptr, dl);
 			cmd.pushConstants(res.transformLayout, vk::ShaderStageFlagBits::eCompute, 0, sizeof(params), &params, dl);
-			cmd.dispatch((myMaxPoints + kTransformGroupSize - 1) / kTransformGroupSize, 1, 1, dl);
+			cmd.dispatch((myMaxPoints + TransformGroupSize - 1) / TransformGroupSize, 1, 1, dl);
 		}
 
-		// The cube
-		if (myCubeDst)
-		{
+		// The cube: its corners, and its index buffer. One storage buffer each, so
+		// both use the cube's set layout and pipeline layout.
+		auto dispatchCube = [&](vk::Pipeline pipeline, const OP_SmartRef<POP_Buffer>& dst,
+								uint32_t count, uint32_t groupSize) {
 			vk::DescriptorSet set = allocSet(res.cubeSetLayout);
-			if (set)
-			{
-				vk::DescriptorBufferInfo buf(vk::Buffer(myCubeDst->getVkBuffer(nullptr)), 0, VK_WHOLE_SIZE);
-				vk::WriteDescriptorSet write(set, 0, 0, 1, vk::DescriptorType::eStorageBuffer, nullptr, &buf);
-				res.device.updateDescriptorSets(1, &write, 0, nullptr, dl);
+			if (!set)
+				return;
+			vk::DescriptorBufferInfo buf(vk::Buffer(dst->getVkBuffer(nullptr)), 0, vk::WholeSize);
+			vk::WriteDescriptorSet write(set, 0, 0, 1, vk::DescriptorType::eStorageBuffer, nullptr, &buf);
+			res.device.updateDescriptorSets(1, &write, 0, nullptr, dl);
 
-				params.maxPoints = kCubePoints;
-				cmd.bindPipeline(vk::PipelineBindPoint::eCompute, res.cubePipeline, dl);
-				cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, res.cubeLayout, 0, 1, &set, 0, nullptr, dl);
-				cmd.pushConstants(res.cubeLayout, vk::ShaderStageFlagBits::eCompute, 0, sizeof(params), &params, dl);
-				cmd.dispatch((kCubePoints + kCubeGroupSize - 1) / kCubeGroupSize, 1, 1, dl);
-			}
-		}
+			params.maxPoints = CubePoints;
+			cmd.bindPipeline(vk::PipelineBindPoint::eCompute, pipeline, dl);
+			cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, res.cubeLayout, 0, 1, &set, 0, nullptr, dl);
+			cmd.pushConstants(res.cubeLayout, vk::ShaderStageFlagBits::eCompute, 0, sizeof(params), &params, dl);
+			cmd.dispatch((count + groupSize - 1) / groupSize, 1, 1, dl);
+		};
+		if (myCubeDst)
+			dispatchCube(res.cubePipeline, myCubeDst, CubePoints, CubeGroupSize);
+		if (myCubeIndicesDst)
+			dispatchCube(res.cubeIndicesPipeline, myCubeIndicesDst, CubeIndexCount, CubeIndicesGroupSize);
 	}
 
 private:
@@ -447,6 +476,7 @@ private:
 	uint32_t							myNumPoints = 0;
 
 	OP_SmartRef<POP_Buffer>				myCubeDst;
+	OP_SmartRef<POP_Buffer>				myCubeIndicesDst;
 };
 
 // ---------------------------------------------------------------------------------
@@ -523,8 +553,7 @@ getAllAttributes(POP_AttributeClass c, const OP_POPInput* input)
 		POP_GetBufferInfo info;
 		info.location      = POP_BufferLocation::Vulkan;
 		info.mode          = POP_GetBufferMode::ReferenceInput;
-		info.dstStageMask  = kInputStages;
-		info.dstAccessMask = kInputAccess;
+		setInputUsage(info);
 		OP_SmartRef<POP_Buffer> buf = attr->getBuffer(info, nullptr);
 		res.emplace_back(std::string(attr->info.name), buf);
 	}
@@ -606,16 +635,14 @@ VulkanPOP::processInput(POP_Output* output, const OP_POPInput* input, const Posi
 	POP_GetBufferInfo ginfo;
 	ginfo.location      = POP_BufferLocation::CPUOrVulkan;
 	ginfo.mode          = POP_GetBufferMode::ReferenceInput;
-	ginfo.dstStageMask  = kInputStages;
-	ginfo.dstAccessMask = kInputAccess;
+	setInputUsage(ginfo);
 	POP_InfoBuffers inInfo;
 	input->getAllInfoBuffers(&inInfo, ginfo, nullptr);
 
 	POP_GetBufferInfo indexGInfo;
 	indexGInfo.location      = POP_BufferLocation::Vulkan;
 	indexGInfo.mode          = POP_GetBufferMode::ReferenceInput;
-	indexGInfo.dstStageMask  = kInputStages;
-	indexGInfo.dstAccessMask = kInputAccess;
+	setInputUsage(indexGInfo);
 	OP_SmartRef<POP_Buffer> inIndex = input->getIndexBuffer(nullptr)->getBuffer(indexGInfo, nullptr);
 
 	// The position shader works on 3 floats per point, so P must be exactly that.
@@ -687,22 +714,28 @@ VulkanPOP::processInput(POP_Output* output, const OP_POPInput* input, const Posi
 	{
 		auto recorder = new VulkanPOPRecorder(myResources, std::move(jobs), xform);
 		recorder->setPointCount(inInfo.maxInfo.points, std::move(gpuPointInfo), numPoints);
-		output->addVulkanCommandRecorder(OP_SmartRef<POP_VulkanCommandRecorder>(recorder));
+		output->addVulkanCommandRecorder(OP_SmartRef<OP_VulkanCommandRecorder>(recorder));
 	}
 
 	// ---- Assign the outputs --------------------------------------------------------
-	// Only our new buffers go to the output, never the input references. Ordering
-	// against the GPU work is handled by TouchDesigner.
-	POP_SetBufferInfo sinfo;
-	sinfo.srcStageMask = VkPipelineStageFlags2(vk::PipelineStageFlagBits2::eComputeShader);
-	sinfo.srcAccessMask = VkAccessFlags2(vk::AccessFlagBits2::eShaderWrite);
+	// Only our new buffers go to the output, never the input references. Each one
+	// says how it was written, so TouchDesigner can order its own use of it after
+	// our commands: P by the TransformPosition shader, the other GPU buffers by
+	// buffer copies. Buffers on the CPU were never touched by our commands.
+	auto writtenByCopy = [](const OP_SmartRef<POP_Buffer>& buf) {
+		return (buf && buf->info.location == POP_BufferLocation::Vulkan) ?
+			writtenBy(CopyStages, CopyAccess) : POP_SetBufferInfo();
+	};
 
 	auto setOutputs = [&](AttributeList& out, POP_AttributeClass c) {
 		for (auto& [name, buf] : out)
 		{
 			const POP_Attribute* attr = input->getAttribute(c, name.c_str(), nullptr);
-			if (attr && buf)
-				output->setAttribute(&buf, attr->info, sinfo, nullptr);
+			if (!attr || !buf)
+				continue;
+			const bool isP = transformP && c == POP_AttributeClass::Point && name == "P";
+			const POP_SetBufferInfo sinfo = isP ? writtenBy(ComputeStages, ComputeAccess) : writtenByCopy(buf);
+			output->setAttribute(&buf, attr->info, sinfo, nullptr);
 		}
 	};
 	setOutputs(outPoint, POP_AttributeClass::Point);
@@ -710,12 +743,20 @@ VulkanPOP::processInput(POP_Output* output, const OP_POPInput* input, const Posi
 	setOutputs(outPrim, POP_AttributeClass::Primitive);
 
 	if (outIndex)
+	{
+		const POP_SetBufferInfo sinfo = writtenByCopy(outIndex);
 		output->setIndexBuffer(&outIndex, input->getIndexBuffer(nullptr)->info, sinfo, nullptr);
+	}
 
-	// These are set on the CPU
-	sinfo.srcStageMask = 0;
-	sinfo.srcAccessMask = 0;
-	output->setInfoBuffers(&outInfo, sinfo, nullptr);
+	// One POP_SetBufferInfo for all the info buffers. Some may be GPU copies of the
+	// input's (point and topology info can be on the GPU), others CPU copies.
+	const bool anyInfoOnGPU =
+		(outInfo.pointInfo && outInfo.pointInfo->info.location == POP_BufferLocation::Vulkan) ||
+		(outInfo.topoInfo && outInfo.topoInfo->info.location == POP_BufferLocation::Vulkan) ||
+		(outInfo.lineStripsInfo && outInfo.lineStripsInfo->info.location == POP_BufferLocation::Vulkan) ||
+		(outInfo.lineStripsPrimIndices && outInfo.lineStripsPrimIndices->info.location == POP_BufferLocation::Vulkan);
+	const POP_SetBufferInfo infoSInfo = anyInfoOnGPU ? writtenBy(CopyStages, CopyAccess) : POP_SetBufferInfo();
+	output->setInfoBuffers(&outInfo, infoSInfo, nullptr);
 }
 
 void
@@ -724,18 +765,20 @@ VulkanPOP::generateCube(POP_Output* output, const PositionTransform& xform)
 	// ---- Create every output buffer before adding the command recorder -------------
 	// P is computed on the GPU, so it's a Vulkan buffer.
 	POP_BufferInfo posInfo;
-	posInfo.size     = kCubePoints * 3 * sizeof(float);
+	posInfo.size     = CubePoints * 3 * sizeof(float);
 	posInfo.usage    = POP_BufferUsage::Attribute;
 	posInfo.location = POP_BufferLocation::Vulkan;
 	OP_SmartRef<POP_Buffer> posBuf = myContext->createBuffer(posInfo, nullptr);
 
-	// The indices and info buffers are small and fixed, so they're filled on the CPU.
-	// Mixing CPU and GPU buffers in one output is fine.
+	// The index buffer is written on the GPU too, by MakeCubeIndices.comp.
 	POP_BufferInfo indexInfo;
-	indexInfo.size     = sizeof(kCubeIndices);
+	indexInfo.size     = CubeIndexCount * sizeof(uint32_t);
 	indexInfo.usage    = POP_BufferUsage::IndexBuffer;
-	indexInfo.location = POP_BufferLocation::CPU;
+	indexInfo.location = POP_BufferLocation::Vulkan;
 	OP_SmartRef<POP_Buffer> indexBuf = myContext->createBuffer(indexInfo, nullptr);
+
+	// The info buffers are small and fixed, so they're filled on the CPU.
+	// Mixing CPU and GPU buffers in one output is fine.
 
 	POP_BufferInfo pointInfoInfo;
 	pointInfoInfo.size     = sizeof(POP_PointInfo);
@@ -750,51 +793,45 @@ VulkanPOP::generateCube(POP_Output* output, const PositionTransform& xform)
 	OP_SmartRef<POP_Buffer> topoInfoBuf = myContext->createBuffer(topoInfoInfo, nullptr);
 
 	// No recorder has been added yet, so returning here leaves no GPU work behind.
-	if (!posBuf || !indexBuf || !pointInfoBuf || !topoInfoBuf || !posBuf->getVkBuffer(nullptr))
+	if (!posBuf || !indexBuf || !pointInfoBuf || !topoInfoBuf ||
+		!posBuf->getVkBuffer(nullptr) || !indexBuf->getVkBuffer(nullptr))
 	{
 		myError = "Failed to create output buffers";
 		return;
 	}
 
 	// Fill the CPU buffers (sequentially, as POP_BufferMode::SequentialWrite expects).
-	memcpy(indexBuf->getData(nullptr), kCubeIndices, sizeof(kCubeIndices));
-
 	POP_PointInfo* pointInfo = new (pointInfoBuf->getData(nullptr)) POP_PointInfo();
-	pointInfo->numPoints = kCubePoints;
+	pointInfo->numPoints = CubePoints;
 
 	POP_TopologyInfo* topoInfo = new (topoInfoBuf->getData(nullptr)) POP_TopologyInfo();
 	topoInfo->quadsStartIndex = 0;
-	topoInfo->quadsCount      = kCubeQuads;
+	topoInfo->quadsCount      = CubeQuads;
 
 	// ---- Vulkan work ---------------------------------------------------------------
 	auto recorder = new VulkanPOPRecorder(myResources, {}, xform);
-	recorder->setCube(posBuf);
-	output->addVulkanCommandRecorder(OP_SmartRef<POP_VulkanCommandRecorder>(recorder));
+	recorder->setCube(posBuf, indexBuf);
+	output->addVulkanCommandRecorder(OP_SmartRef<OP_VulkanCommandRecorder>(recorder));
 
 	// ---- Assign the outputs --------------------------------------------------------
-	POP_SetBufferInfo sinfo;
+	// P and the indices are written by our shaders; the info buffers on the CPU.
+	const POP_SetBufferInfo gpuSInfo = writtenBy(ComputeStages, ComputeAccess);
 
 	POP_AttributeInfo posAttr;
 	posAttr.name          = "P";
 	posAttr.numComponents = 3;
 	posAttr.type          = POP_AttributeType::Float;
 	posAttr.attribClass   = POP_AttributeClass::Point;
-	sinfo.srcStageMask = VkPipelineStageFlags2(vk::PipelineStageFlagBits2::eComputeShader);
-	sinfo.srcAccessMask = VkAccessFlags2(vk::AccessFlagBits2::eShaderWrite);
-	output->setAttribute(&posBuf, posAttr, sinfo, nullptr);
-
-	// The others are set from the CPU.
-	sinfo.srcStageMask = 0;
-	sinfo.srcAccessMask = 0;
+	output->setAttribute(&posBuf, posAttr, gpuSInfo, nullptr);
 
 	POP_IndexBufferInfo indexBufInfo;
-	output->setIndexBuffer(&indexBuf, indexBufInfo, sinfo, nullptr);
+	output->setIndexBuffer(&indexBuf, indexBufInfo, gpuSInfo, nullptr);
 
 	// Both info buffers are on the CPU, so maxInfo isn't needed.
 	POP_InfoBuffers infoBufs;
 	infoBufs.pointInfo = std::move(pointInfoBuf);
 	infoBufs.topoInfo  = std::move(topoInfoBuf);
-	output->setInfoBuffers(&infoBufs, sinfo, nullptr);
+	output->setInfoBuffers(&infoBufs, POP_SetBufferInfo(), nullptr);
 }
 
 // ---------------------------------------------------------------------------------

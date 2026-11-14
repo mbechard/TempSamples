@@ -526,9 +526,9 @@ protected:
 
 // Helper class to implement the pure-virtual OP_RefCount methods. You put this between your class
 // and the more complex base class (that is a subclass of OP_RefCount).
-// class YourClass : public OP_RefCountImpl<COMP_VulkanCommandRecorder>
+// class YourClass : public OP_RefCountImpl<OP_VulkanCommandRecorder>
 // {
-//		// Functions that implement requirements of COMP_VulkanCommandRecorder
+//		// Functions that implement requirements of OP_VulkanCommandRecorder
 // };
 template<class Base>
 class OP_RefCountImpl : public Base
@@ -1110,27 +1110,59 @@ protected:
 	virtual void* reservedFunc15() = 0;
 };
 
+class OP_MetalInfo
+{
+public:
+#ifdef __APPLE__
+	id<MTLDevice>	device = nil;
+#endif
+
+private:
+	int32_t			reserved[50] = {};
+};
+
 class OP_VulkanCommandRecordInfo
 {
 public:
-	// You can hang onto this OP_VulkanCommandBuffer reference beyond the recordCommands call to do things
-	// such as call commandBuffer->waitForCompletion().
-	// However the command buffer itself should not be used anymore after recordCommands()
+	// You should hang onto this OP_VulkanCommandBuffer reference beyond the recordCommands call to do things
+	// such as call commandBuffer->waitForCompletion(). That can be used to know when it's safe to clean up
+	// resources you used for that command buffer.
+	// However the command buffer itself should not be used anymore after recordCommands().
 	OP_SmartRef<OP_VulkanCommandBuffer>		commandBuffer;
 
 private:
 	int32_t reserved[100] = {};
 };
 
-class OP_MetalInfo
+// You need to create an implemenation of a subclass of OP_VulkanTextureRenderRecorder that implements
+// recordCommands().
+// The call to recordCommands() may occur at any time. It could occur right away during
+// addVulkanCommandRecorder(), or may be deferred to a later time and in another thread.
+// So it must be thread-safe and have stable references/copies
+// to all of the data it needs to use during the command recording.
+class OP_VulkanCommandRecorder : public OP_RefCount
 {
 public:
-#ifdef __APPLE__
-	id<MTLDevice>	device = nil;
+	~OP_VulkanCommandRecorder()
+	{
+	}
 
-#endif
+	// This will be called when it's time to record the commands into the command buffer.
+	virtual void	recordCommands(const OP_VulkanCommandRecordInfo* info, void* reserved1) = 0;
+
 private:
-	int32_t			reserved[50] = {};
+	virtual int32_t	reservedFunc0() { return 0; }
+	virtual int32_t	reservedFunc1() { return 0; }
+	virtual int32_t	reservedFunc2() { return 0; }
+	virtual int32_t	reservedFunc3() { return 0; }
+	virtual int32_t	reservedFunc4() { return 0; }
+	virtual int32_t	reservedFunc5() { return 0; }
+	virtual int32_t	reservedFunc6() { return 0; }
+	virtual int32_t	reservedFunc7() { return 0; }
+	virtual int32_t	reservedFunc8() { return 0; }
+	virtual int32_t	reservedFunc9() { return 0; }
+
+	int32_t reserved[100] = {};
 };
 
 // This class can be given to another thread that is recording the command buffer.
@@ -1725,9 +1757,10 @@ public:
 	// beginCUDAOperations() has been called afterwards.
 	virtual const OP_CUDAArrayInfo*				getCUDAArray(const OP_CUDAAcquireInfo& info, void* reserved2) const = 0;
 
+	// For use with a POP, TOP or Panel COMP that is using Vulkan.
 	virtual OP_SmartRef<OP_VulkanImage>			getVulkanImage(const OP_GetVulkanImageInfo& info, void* reserved2) const = 0;
 
-	// For use with Metal. Call on all the TOPs you want to gather textures from, then call finalizeMetalResources()
+	// For use with Metal in a POP or TOP. Call on all the input TOPs you want to gather textures from, then call finalizeMetalResources()
 	// before you use them in your Metal operation.
 	virtual OP_SmartRef<OP_MetalTexture>		getMetalTexture(void* reserved2) const = 0;
 
@@ -1901,22 +1934,19 @@ enum class POP_BufferLocation : uint32_t
 	// This is only valid when getting buffers, not for creating them.
 	CPUOrVulkan,
 
-#ifdef _WIN32
 	CUDA = 20,
 	// Return the buffer where it currently resides. If it's currently on the CPU
 	// it will return it there, if it's currently on the GPU then it will return it
 	// as a CUDA buffer.
 	// This is only valid when getting buffers, not for creating them.
-	CPUOrCUDA = 21,
-#endif
-#ifdef __APPLE__
+	CPUOrCUDA,
+
 	Metal = 30,
 	// Return the buffer where it currently resides. If it's currently on the CPU
 	// it will return it there, if it's currently on the GPU then it will return it
 	// as a MTLBuffer buffer.
 	// This is only valid when getting buffers, not for creating them.
 	CPUOrMetal,
-#endif
 };
 
 // For POP buffers that are in CPU memory.
@@ -2205,7 +2235,8 @@ public:
 
 	// Helper function to get all of the Info buffers in one call, if you know you need them all.
 	// Note that some of the info buffers are always on the CPU, so you must ask for the data as
-	// POP_BufferLocation::CPU, POP_BufferLocation::CPUOrCUDA or POP_BufferLocation::CPUOrMetal.
+	// POP_BufferLocation::CPU, POP_BufferLocation::CPUOrCUDA, POP_BufferLocation::CPUOrMetal.
+	// or POP_BufferLocation::CPUOrVulkan.
 	// Will return false if this fails.
 	virtual bool						getAllInfoBuffers(POP_InfoBuffers* buffers, const POP_GetBufferInfo& info,
 															void* reserved) const = 0;

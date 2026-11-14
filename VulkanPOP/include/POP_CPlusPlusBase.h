@@ -207,29 +207,6 @@ private:
 	int32_t			reserved[26] = {};
 };
 
-class POP_VulkanCommandRecorder : public OP_RefCount
-{
-public:
-	~POP_VulkanCommandRecorder()
-	{
-	}
-
-	virtual void	recordCommands(const OP_VulkanCommandRecordInfo* info, void* reserved1) = 0;
-
-private:
-	virtual int32_t	reservedFunc0() { return 0; }
-	virtual int32_t	reservedFunc1() { return 0; }
-	virtual int32_t	reservedFunc2() { return 0; }
-	virtual int32_t	reservedFunc3() { return 0; }
-	virtual int32_t	reservedFunc4() { return 0; }
-	virtual int32_t	reservedFunc5() { return 0; }
-	virtual int32_t	reservedFunc6() { return 0; }
-	virtual int32_t	reservedFunc7() { return 0; }
-	virtual int32_t	reservedFunc8() { return 0; }
-	virtual int32_t	reservedFunc9() { return 0; }
-
-	int32_t reserved[100] = {};
-};
 class POP_Output
 {
 public:
@@ -259,7 +236,10 @@ public:
 	// Call OP_MetalOperationSync::addWaitSyncs() before any commands that use the input buffers.
 	virtual OP_SmartRef<OP_MetalOperationSync>		finalizeMetalResources(void* reserved) = 0;
 
-	virtual void									addVulkanCommandRecorder(OP_SmartRef<POP_VulkanCommandRecorder>&& recorder) = 0;
+	// When the POP_DeviceAPI is Vulkan, you can use this to give command recoders as part of the execute(), that will record/execute
+	// your vulkan operations at a later time.
+	// See OP_VulkanCommandRecorder for more information.
+	virtual void									addVulkanCommandRecorder(OP_SmartRef<OP_VulkanCommandRecorder>&& recorder) = 0;
 private:
 
 	int32_t reserved[20] = {};

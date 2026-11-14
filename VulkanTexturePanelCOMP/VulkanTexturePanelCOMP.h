@@ -42,7 +42,7 @@ public:
 	virtual void		getGeneralInfo(COMP_PanelGeneralInfo *, const OP_Inputs*, void*) override;
 
 	virtual void		execute(const OP_Inputs*, void* reserved1) override;
-	virtual OP_SmartRef<COMP_VulkanCommandRecorder> prepareRenderForVulkanTexture(const OP_Inputs* inputs,
+	virtual OP_SmartRef<OP_VulkanCommandRecorder> prepareRenderForVulkanTexture(const OP_Inputs* inputs,
 																					OP_SmartRef<COMP_VulkanTextureRenderInfo>&& info,
 																					void* reserved1) override;
 	virtual bool		mouseEvent(const COMP_PanelMouseEvent& mouse, void* reserved1) override;

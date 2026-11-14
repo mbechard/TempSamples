@@ -31,19 +31,19 @@ target_link_libraries(VulkanPOPVulkan INTERFACE Vulkan::Headers)
 target_compile_definitions(VulkanPOPVulkan INTERFACE VK_NO_PROTOTYPES)
 
 # -----------------------------------------------------------------------------
-# Compute shaders: GLSL -> SPIR-V, embedded as C arrays (k<Name>Spv)
+# Compute shaders: GLSL -> SPIR-V, embedded as C arrays (<Name>Spv)
 # -----------------------------------------------------------------------------
 # SPIR-V 1.0 (Vulkan 1.0 environment) runs on every Vulkan TouchDesigner
 # supports; OP_VulkanInfo::spirvMajorVersion/spirvMinorVersion give the maximum.
 set(_spv_dir "${CMAKE_CURRENT_BINARY_DIR}/shaders")
 set(_spv_headers "")
-foreach(shader IN ITEMS TransformPosition MakeCube)
+foreach(shader IN ITEMS TransformPosition MakeCube MakeCubeIndices)
 	set(_src "${CMAKE_CURRENT_SOURCE_DIR}/${shader}.comp")
 	set(_out "${_spv_dir}/${shader}.spv.h")
 	add_custom_command(
 		OUTPUT "${_out}"
 		COMMAND ${CMAKE_COMMAND} -E make_directory "${_spv_dir}"
-		COMMAND Vulkan::glslangValidator -V --target-env vulkan1.0 --vn k${shader}Spv -o "${_out}" "${_src}"
+		COMMAND Vulkan::glslangValidator -V --target-env vulkan1.0 --vn ${shader}Spv -o "${_out}" "${_src}"
 		DEPENDS "${_src}"
 		COMMENT "Compiling ${shader}.comp to SPIR-V"
 		VERBATIM)
@@ -63,6 +63,7 @@ td_add_custom_op(VulkanPOP
 		VulkanPOP.h
 		TransformPosition.comp
 		MakeCube.comp
+		MakeCubeIndices.comp
 		${_spv_headers}
 		include/BitMaskFlags.h
 		include/CPlusPlus_Common.h

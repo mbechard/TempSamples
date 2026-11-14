@@ -116,7 +116,7 @@ VulkanTexturePanelCOMP::getGeneralInfo(COMP_PanelGeneralInfo* ginfo, const OP_In
 	ginfo->cookEveryFrameIfAsked = true;
 }
 
-class ExampleRecorder : public OP_RefCountImpl<COMP_VulkanCommandRecorder>
+class ExampleRecorder : public OP_RefCountImpl<OP_VulkanCommandRecorder>
 {
 public:
 
@@ -179,12 +179,12 @@ private:
 	std::array<float, 4>						myColor;
 };
 
-OP_SmartRef<COMP_VulkanCommandRecorder>
+OP_SmartRef<OP_VulkanCommandRecorder>
 VulkanTexturePanelCOMP::prepareRenderForVulkanTexture(const OP_Inputs* inputs,
 													OP_SmartRef<COMP_VulkanTextureRenderInfo>&& info,
 													void* reserved1)
 {
-	return OP_SmartRef<COMP_VulkanCommandRecorder>(new ExampleRecorder(std::move(info), myDispatchLoader, myColor));
+	return OP_SmartRef<OP_VulkanCommandRecorder>(new ExampleRecorder(std::move(info), myDispatchLoader, myColor));
 }
 
 void

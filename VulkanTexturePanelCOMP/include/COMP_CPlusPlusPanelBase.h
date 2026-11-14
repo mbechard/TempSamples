@@ -520,35 +520,6 @@ private:
 	int32_t reserved[100] = {};
 };
 
-// You need to create an implemenation of a subclass of COMP_VulkanTextureRenderRecorder that implements
-// recordCommands().
-// The call to this may be deferred to a later time and in another thread,
-// so it must be thread-safe and have stable references/copies
-// to all of the data it needs to use during the command recording.
-class COMP_VulkanCommandRecorder : public OP_RefCount
-{
-public:
-	~COMP_VulkanCommandRecorder()
-	{
-	}
-
-	virtual void	recordCommands(const OP_VulkanCommandRecordInfo* info, void* reserved1) = 0;
-
-private:
-	virtual int32_t	reservedFunc0() { return 0; }
-	virtual int32_t	reservedFunc1() { return 0; }
-	virtual int32_t	reservedFunc2() { return 0; }
-	virtual int32_t	reservedFunc3() { return 0; }
-	virtual int32_t	reservedFunc4() { return 0; }
-	virtual int32_t	reservedFunc5() { return 0; }
-	virtual int32_t	reservedFunc6() { return 0; }
-	virtual int32_t	reservedFunc7() { return 0; }
-	virtual int32_t	reservedFunc8() { return 0; }
-	virtual int32_t	reservedFunc9() { return 0; }
-
-	int32_t reserved[100] = {};
-};
-
 class COMP_DropEvent
 {
 public:
@@ -631,21 +602,21 @@ public:
 	// Called if the COMP_RenderMode is VulkanTexture.
 	// You can evaluate TOP inputs here and get references to OP_VulkanImage that you hold onto
 	// until the render occurs.
-	// Return your own implemenation of COMP_VulkanCommandRecorder, wrapped in a OP_SmartRef
+	// Return your own implemenation of OP_VulkanCommandRecorder, wrapped in a OP_SmartRef
 	// to the caller.
 	// The caller will use that instance sometime in the future to request the rendering commands to
 	// be recorded.
 	// That call may occur from another thread, and possibly after a future call to execute() on the next frame
-	// so ensure all of the changing information needed for the rendering is held by the the COMP_VulkanCommandRecorder,
+	// so ensure all of the changing information needed for the rendering is held by the the OP_VulkanCommandRecorder,
 	// not in this class.
-	// You should not hold onto your own reference to the COMP_VulkanCommandRecorder instance. It will be used
+	// You should not hold onto your own reference to the OP_VulkanCommandRecorder instance. It will be used
 	// and then destroyed by TouchDesigner after the render commands are recorded.
-	// You become the owner of 'info', and can give it to your COMP_VulkanCommandRecorder to hold onto.
-	// You can return an empty OP_SmartRef<COMP_VulkanCommandRecorder>() if you are unable to render anything for the request.
-	virtual OP_SmartRef<COMP_VulkanCommandRecorder>
+	// You become the owner of 'info', and can give it to your OP_VulkanCommandRecorder to hold onto.
+	// You can return an empty OP_SmartRef<OP_VulkanCommandRecorder>() if you are unable to render anything for the request.
+	virtual OP_SmartRef<OP_VulkanCommandRecorder>
 	prepareRenderForVulkanTexture(const OP_Inputs* inputs, OP_SmartRef<COMP_VulkanTextureRenderInfo>&& info, void* reserved1)
 	{
-		return OP_SmartRef<COMP_VulkanCommandRecorder>();
+		return OP_SmartRef<OP_VulkanCommandRecorder>();
 	}
 
 	// Event handling:

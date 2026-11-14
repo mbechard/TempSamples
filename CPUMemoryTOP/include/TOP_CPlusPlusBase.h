@@ -70,6 +70,10 @@ enum class TOP_ExecuteMode : int32_t
 	// to get the OP_MetalOperationSync, whose wait and signal synchronizations you must add to
 	// your command buffer before and after your Metal operations.
 	Metal,
+
+	// Using Vulkan, Textures will be given as VkImage/VkImageView.
+	// Use TOP_Output::addVulkanCommandRecorder() to record commands for Vulkan to execute.
+	Vulkan,
 };
 
 // For older plugins that used this before it was renamed
@@ -210,7 +214,7 @@ public:
 
 	// Returns the CUDA device index the process is currently using. Returns -1 if this
 	// node is not using CUDA execution mode.
-	// For Metal, the device is available from getMetalUtils()->getMetalInfo()->device.
+	// For Metal, the MTLDevice is available from getMetalUtils()->getMetalInfo()->device.
 	virtual int			getCUDADeviceIndex(void* reserved) = 0;
 
 protected:
@@ -293,8 +297,14 @@ public:
 	OP_ColorSpace		colorSpace = OP_ColorSpace::DefaultForWorkingColorSpace;
 	OP_ReferenceWhite	referenceWhite = OP_ReferenceWhite::DefaultForColorSpace;
 
+	// These two must be filled in if you are using Vulkan.
+	// The stage(s) you will be writting the texture in.
+	VkPipelineStageFlags2	srcStageMask = 0;
+	// The access flags for how you will write to the texture.
+	VkAccessFlags2			srcAccessMask = 0;
+
 private:
-	uint32_t			reserved[30] = {};
+	uint32_t			reserved[26] = {};
 };
 
 class TOP_Output
@@ -332,6 +342,15 @@ public:
 	// and commit it, as well as call allCommandsCommitted() once you've committed the command buffer(s).
 	// Call addWaitSyncs() before any commands that use the input textures.
 	virtual OP_SmartRef<OP_MetalOperationSync>	finalizeMetalResources(void* reserved) = 0;
+
+	// Gives you back the OP_VulkanImage you should fill in for the output specified by 'info'.
+	// Only usable in TOP_ExecuteMode::Vulkan.
+	virtual OP_SmartRef<OP_VulkanImage>			outputVulkanImage(const TOP_TextureOutputInfo& info, void* reserved) = 0;
+
+	// When the TOP_ExecuteMode is Vulkan, you can use this to give command recoders as part of the execute(), that will record/execute
+	// your vulkan operations at a later time.
+	// See OP_VulkanCommandRecorder for more information.
+	virtual void								addVulkanCommandRecorder(OP_SmartRef<OP_VulkanCommandRecorder>&& recorder) = 0;
 
 private:
 	virtual void	reserved3() = 0;
