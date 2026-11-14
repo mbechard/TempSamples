@@ -321,9 +321,9 @@ public:
 	// but it can safely be ignored in cases where it makes sense.
 	virtual void	getSuggestedOutputDesc(OP_TextureDesc* desc, void* reserved) = 0;
 
-	// Gives you back the TOP_Texture you should fill in for the output specified by 'info'.
+	// Gives you back the OP_MetalTexture you should fill in for the output specified by 'info'.
 	// Only usable in TOP_ExecuteMode::Metal. Must be called before finalizeMetalResources().
-	virtual OP_SmartRef<TOP_Texture>	outputTexture(const TOP_TextureOutputInfo& info, void* reserved) = 0;
+	virtual OP_SmartRef<OP_MetalTexture>		outputMetalTexture(const TOP_TextureOutputInfo& info, void* reserved) = 0;
 
 	// You must call this if you are going to commit a Metal command buffer.
 	// Call this after all of the calls getting inputs, and after allocating your outputs via outputTexture() calls.

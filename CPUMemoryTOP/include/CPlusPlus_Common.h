@@ -52,6 +52,7 @@ stays the same, otherwise changes won't be backwards compatible
 	VK_DEFINE_HANDLE(VkDevice);
 	VK_DEFINE_HANDLE(VkCommandBuffer);
 	VK_DEFINE_HANDLE(VkImage);
+	VK_DEFINE_HANDLE(VkBuffer);
 	VK_DEFINE_HANDLE(VkImageView);
 	typedef struct
 	{
@@ -1661,12 +1662,10 @@ class OP_GetVulkanImageInfo
 {
 public:
 	// The stages you are going to use the image in.
-	VkPipelineStageFlags2		dstStageMask;
+	VkPipelineStageFlags2		dstStageMask = 0;
 
-	// The access flags for how you will usage the image.
-	VkAccessFlags2				dstAccessMask;
-
-	// Curerently, the layout of the image you get will always be SHADER_READ_OPTIMAL
+	// The access flags for how you will use the image.
+	VkAccessFlags2				dstAccessMask = 0;
 
 	uint32_t reserved[25] = {};
 };
@@ -1676,7 +1675,8 @@ class OP_VulkanImage : public OP_RefCount
 public:
 	VkImage					image;
 
-	// The layout the image will be in when you use it, as requested in OP_GetVulkanImageInfo
+	// The layout the image is in. It must be this layout at the end of your commands,
+	// so change it back if you change it to something else.
 	VkImageLayout			layout;
 
 	// The subresource range for the image
@@ -1684,16 +1684,20 @@ public:
 
 	VkImageCreateInfo		createInfo;
 
+private:
 	uint32_t reserved[25] = {};
+
+	virtual void	reservedFunc0() = 0;
+	virtual void	reservedFunc1() = 0;
 };
 
-class TOP_Texture : public OP_RefCount
+class OP_MetalTexture : public OP_RefCount
 {
 public:
 	OP_TextureDesc		textureDesc;
 
 #ifdef __APPLE__
-	virtual id<MTLTexture>		getMetalTexture(void* reserved) const = 0;
+	virtual id<MTLTexture>		getMTLTexture(void* reserved) const = 0;
 #endif
 
 private:
@@ -1701,9 +1705,6 @@ private:
 
 	virtual void	reservedFunc0() = 0;
 	virtual void	reservedFunc1() = 0;
-	virtual void	reservedFunc2() = 0;
-	virtual void	reservedFunc3() = 0;
-	virtual void	reservedFunc4() = 0;
 };
 
 class OP_TOPInput
@@ -1728,7 +1729,7 @@ public:
 
 	// For use with Metal. Call on all the TOPs you want to gather textures from, then call finalizeMetalResources()
 	// before you use them in your Metal operation.
-	virtual const OP_SmartRef<TOP_Texture>		getTexture(void* reserved2) const = 0;
+	virtual OP_SmartRef<OP_MetalTexture>		getMetalTexture(void* reserved2) const = 0;
 
 	const char*		opPath;
 	uint32_t		opId;
@@ -1918,6 +1919,7 @@ enum class POP_BufferLocation : uint32_t
 #endif
 };
 
+// For POP buffers that are in CPU memory.
 enum class POP_BufferMode : uint32_t
 {
 	// You should write to the buffer sequentially.
@@ -1981,7 +1983,7 @@ public:
 	// When this buffer is retrieved from an input, if the location is POP_BufferLocation::CPU,
 	// then getData() will stall until the GPU->CPU download has completed.
 	// If the location is CUDA, then you will immediately be given the CUDA device pointer.
-	// If the location is Metal, use getMetalBuffer() to access the data.
+	// If the location is Metal, use getMTLBuffer() to access the data.
 	//
 	// For CPU data, you can use this to have another thread stall waiting for the data to be ready before processing.
 	// Or you can hold onto the POP_Buffer until a later time (to avoid the stall) and consume the data
@@ -1993,9 +1995,10 @@ public:
 	// some offset inside the buffer due to memory pooling. The passed offset variable
 	// will be filled with the offset amount. You need to use the offset
 	// to find the actual data.
-	virtual id<MTLBuffer>	getMetalBuffer(uint64_t* offset, void* reserved) const = 0;
+	virtual id<MTLBuffer>	getMTLBuffer(uint64_t* offset, void* reserved) const = 0;
 #endif
 
+	virtual VkBuffer		getVkBuffer(void* reserved) const = 0;
 private:
 	int32_t					reserved[50] = {};
 };
@@ -2027,8 +2030,14 @@ public:
 	// memory. Ignored if the data is on the CPU, that is always a new copy.
 	POP_GetBufferMode		mode = POP_GetBufferMode::Copy;
 
+	// These two must be filled in if you are using Vulkan
+	// The stages you are going to use the buffer in.
+	VkPipelineStageFlags2	dstStageMask = 0;
+	// The access flags for how you will use the buffer.
+	VkAccessFlags2			dstAccessMask = 0;
+
 private:
-	int32_t				reserved[17] = {};
+	int32_t				reserved[12] = {};
 };
 
 // When Point and/or Topology is only known on the GPU, we can't know the actual values on the CPU.
@@ -3736,7 +3745,7 @@ static_assert(sizeof(OP_TOPDownloadResult) == sizeof(OP_RefCount) + sizeof(OP_Te
 #endif
 static_assert(sizeof(OP_MetalOperationSync) == 208,  "Incorrect Size");
 static_assert(sizeof(OP_MetalUtils) == 208,  "Incorrect Size");
-static_assert(sizeof(TOP_Texture) == 156 + 132,  "Incorrect Size");
+static_assert(sizeof(OP_MetalTexture) == 156 + 132,  "Incorrect Size");
 
 // Layout checks for the remaining classes and their public members.
 // Private members are covered by the sizeof() checks.
@@ -3794,7 +3803,7 @@ static_assert(sizeof(OP_CUDAArrayInfo) == 272, "Incorrect Size");
 static_assert(offsetof(OP_CUDAAcquireInfo, stream) == 0, "Incorrect Alignment");
 static_assert(sizeof(OP_CUDAAcquireInfo) == 112, "Incorrect Size");
 
-static_assert(offsetof(TOP_Texture, textureDesc) == 8, "Incorrect Alignment");
+static_assert(offsetof(OP_MetalTexture, textureDesc) == 8, "Incorrect Alignment");
 
 static_assert(offsetof(OP_TOPInput, opPath) == 8, "Incorrect Alignment");
 static_assert(offsetof(OP_TOPInput, opId) == 16, "Incorrect Alignment");

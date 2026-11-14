@@ -129,7 +129,7 @@ public:
 	}
 
 	virtual void
-	recordCommands(const COMP_VulkanCommandRecordInfo* recordInfo, void*) override
+	recordCommands(const OP_VulkanCommandRecordInfo* recordInfo, void*) override
 	{
 		vk::CommandBuffer cmdBuf(recordInfo->commandBuffer->getHandle(nullptr));
 
