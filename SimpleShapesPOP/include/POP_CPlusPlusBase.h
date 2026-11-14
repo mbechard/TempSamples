@@ -197,8 +197,14 @@ public:
 	// OP_MetalOperationSync::addSignalSyncs().
 	cudaStream_t	stream = 0;
 
+	// These two must be filled in if you are using Vulkan and the buffer is a device buffer.
+	// The stage(s) used to fill/use this buffer.
+	VkPipelineStageFlags2	srcStageMask = 0;
+	// The access flags for how the buffer was filled/used.
+	VkAccessFlags2			srcAccessMask = 0;
+
 private:
-	int32_t			reserved[30] = {};
+	int32_t			reserved[26] = {};
 };
 
 class POP_VulkanCommandRecorder : public OP_RefCount

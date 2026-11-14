@@ -1,0 +1,45 @@
+// Copies P from the input buffer to the output buffer, transformed: scaled by
+// 'scale', then 'shift' added to z. Compiled to SPIR-V at build time
+// (see CMakeLists.txt) and embedded in the plugin.
+#version 450
+
+layout(local_size_x = 64) in;
+
+// P is a tightly packed 3-component float attribute (12 bytes per point). In a
+// storage buffer a vec3 array would be padded to 16 bytes, so it's read and
+// written as floats, 3 per point.
+layout(std430, set = 0, binding = 0) readonly buffer Src { float src[]; };
+layout(std430, set = 0, binding = 1) writeonly buffer Dst { float dst[]; };
+
+// The input's point info, when it is on the GPU. Its first member is
+// POP_PointInfo::numPoints.
+layout(std430, set = 0, binding = 2) readonly buffer PointInfo { uint gpuNumPoints; };
+
+// Must match PositionParams in VulkanPOP.cpp.
+layout(push_constant) uniform Params
+{
+	uint  maxPoints;        // size of the buffers, in points
+	float scale;            // applied to x, y and z
+	float shift;            // added to z after scaling
+	uint  numPointsOnGPU;   // 1: read the point count from binding 2
+	uint  numPoints;        // the point count, when it is known on the CPU
+} p;
+
+void main()
+{
+	const uint id = gl_GlobalInvocationID.x;
+	if (id >= p.maxPoints)
+		return;
+
+	vec3 v = vec3(src[id * 3 + 0], src[id * 3 + 1], src[id * 3 + 2]);
+
+	// Elements past the real point count (which may only be known on the GPU) are
+	// copied unchanged, so the whole output buffer is initialized.
+	const uint numPoints = (p.numPointsOnGPU != 0) ? gpuNumPoints : p.numPoints;
+	if (id < numPoints)
+		v = v * p.scale + vec3(0.0, 0.0, p.shift);
+
+	dst[id * 3 + 0] = v.x;
+	dst[id * 3 + 1] = v.y;
+	dst[id * 3 + 2] = v.z;
+}
