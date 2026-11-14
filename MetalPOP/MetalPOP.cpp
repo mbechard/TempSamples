@@ -41,7 +41,7 @@ FillPOPPluginInfo(POP_PluginInfo *info)
 
 	// GPU buffers are exchanged as MTLBuffers. This is already the default on macOS,
 	// but setting it makes the intent explicit.
-	info->gpuAPI = OP_DeviceAPI::Metal;
+	info->deviceAPI = OP_DeviceAPI::Metal;
 
 	// The opType is the unique name for this POP. It must start with a 
 	// capital A-Z character, and all the following characters must lower case
@@ -269,8 +269,8 @@ MetalPOP::encodeCopy(id<MTLBlitCommandEncoder> blit,
 	// POP buffers are pooled: the data lives at an offset inside the MTLBuffer.
 	// makeOutputBuffer() already checked both buffers and their alignment.
 	uint64_t srcOffset = 0, dstOffset = 0;
-	id<MTLBuffer> srcBuf = src->getMetalBuffer(&srcOffset, nullptr);
-	id<MTLBuffer> dstBuf = dst->getMetalBuffer(&dstOffset, nullptr);
+	id<MTLBuffer> srcBuf = src->getMTLBuffer(&srcOffset, nullptr);
+	id<MTLBuffer> dstBuf = dst->getMTLBuffer(&dstOffset, nullptr);
 
 	const uint64_t size = std::min(src->info.size, dst->info.size);
 	if (!srcBuf || !dstBuf || size == 0)
@@ -292,8 +292,8 @@ MetalPOP::encodeTransformPosition(id<MTLComputeCommandEncoder> enc,
 								  const PositionTransform& xform)
 {
 	uint64_t srcOffset = 0, dstOffset = 0;
-	id<MTLBuffer> srcBuf = src->getMetalBuffer(&srcOffset, nullptr);
-	id<MTLBuffer> dstBuf = dst->getMetalBuffer(&dstOffset, nullptr);
+	id<MTLBuffer> srcBuf = src->getMTLBuffer(&srcOffset, nullptr);
+	id<MTLBuffer> dstBuf = dst->getMTLBuffer(&dstOffset, nullptr);
 	if (!srcBuf || !dstBuf)
 	{
 		myError = "Position attribute is not available as a Metal buffer";
@@ -309,7 +309,7 @@ MetalPOP::encodeTransformPosition(id<MTLComputeCommandEncoder> enc,
 	uint64_t infoOffset = 0;
 	id<MTLBuffer> infoBuf = nil;
 	if (pointInfo && pointInfo->info.location == POP_BufferLocation::Metal)
-		infoBuf = pointInfo->getMetalBuffer(&infoOffset, nullptr);
+		infoBuf = pointInfo->getMTLBuffer(&infoOffset, nullptr);
 
 	if (infoBuf)
 	{
@@ -340,7 +340,7 @@ MetalPOP::encodeCube(id<MTLComputeCommandEncoder> enc, const OP_SmartRef<POP_Buf
 					 const PositionTransform& xform)
 {
 	uint64_t dstOffset = 0;
-	id<MTLBuffer> dstBuf = dst->getMetalBuffer(&dstOffset, nullptr);
+	id<MTLBuffer> dstBuf = dst->getMTLBuffer(&dstOffset, nullptr);
 	if (!dstBuf)
 	{
 		myError = "Created position buffer is not a Metal buffer";
@@ -400,7 +400,7 @@ MetalPOP::makeOutputBuffer(const OP_SmartRef<POP_Buffer>& src, std::vector<GPUCo
 	}
 
 	uint64_t srcOffset = 0, dstOffset = 0;
-	if (!src->getMetalBuffer(&srcOffset, nullptr) || !dst->getMetalBuffer(&dstOffset, nullptr))
+	if (!src->getMTLBuffer(&srcOffset, nullptr) || !dst->getMTLBuffer(&dstOffset, nullptr))
 	{
 		myError = "A buffer is not available as a Metal buffer";
 		ok = false;

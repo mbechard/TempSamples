@@ -296,16 +296,16 @@ MetalTOP::execute(TOP_Output* output, const OP_Inputs* inputs, void* reserved1)
 
 		// Gather the optional input. This must happen before finalizeMetalResources().
 		// inTex stays empty if there's no usable input, and we fall back to the plain fill.
-		OP_SmartRef<TOP_Texture> inTex;
+		OP_SmartRef<OP_MetalTexture> inTex;
 		if (inputs->getNumInputs() > 0)
 		{
 			const OP_TOPInput* top = inputs->getInputTOP(0);
 			if (top)
 			{
-				OP_SmartRef<TOP_Texture> t = top->getTexture(nullptr);
+				OP_SmartRef<OP_MetalTexture> t = top->getMetalTexture(nullptr);
 				if (t)
 				{
-					id<MTLTexture> mtlTexture = t->getMetalTexture(nullptr);
+					id<MTLTexture> mtlTexture = t->getMTLTexture(nullptr);
 					if (mtlTexture)
 					{
 						if (top->textureDesc.texDim != OP_TexDim::e2D)
@@ -327,11 +327,11 @@ MetalTOP::execute(TOP_Output* output, const OP_Inputs* inputs, void* reserved1)
 		outInfo.textureDesc.texDim = OP_TexDim::e2D;
 		outInfo.colorBufferIndex = 0;
 
-		OP_SmartRef<TOP_Texture> tex = output->outputTexture(outInfo, nullptr);
+		OP_SmartRef<OP_MetalTexture> tex = output->outputMetalTexture(outInfo, nullptr);
 		if (!tex)
 			return;
 			
-		id<MTLTexture> mtlTex = tex->getMetalTexture(nullptr);
+		id<MTLTexture> mtlTex = tex->getMTLTexture(nullptr);
 		if (!mtlTex)
 			return;
 
@@ -354,7 +354,7 @@ MetalTOP::execute(TOP_Output* output, const OP_Inputs* inputs, void* reserved1)
 		[enc setComputePipelineState:pipeline];
 		[enc setTexture:mtlTex atIndex:0];
 		if (inTex)
-			[enc setTexture:inTex->getMetalTexture(nullptr) atIndex:1];
+			[enc setTexture:inTex->getMTLTexture(nullptr) atIndex:1];
 		[enc setBytes:&params length:sizeof(params) atIndex:0];
 
 		const NSUInteger tw = pipeline.threadExecutionWidth;
