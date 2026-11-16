@@ -302,9 +302,11 @@ public:
 	VkPipelineStageFlags2	srcStageMask = 0;
 	// The access flags for how you will write to the texture.
 	VkAccessFlags2			srcAccessMask = 0;
+	// The final layout you will leave the image in after your operations.
+	VkImageLayout			finalLayout = VkImageLayout(0);
 
 private:
-	uint32_t			reserved[26] = {};
+	uint32_t			reserved[25] = {};
 };
 
 class TOP_Output

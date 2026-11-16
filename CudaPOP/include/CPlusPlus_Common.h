@@ -1707,8 +1707,9 @@ class OP_VulkanImage : public OP_RefCount
 public:
 	VkImage					image;
 
-	// The layout the image is in. It must be this layout at the end of your commands,
+	// The layout the image is in. For input images, it must be this layout at the end of your commands,
 	// so change it back if you change it to something else.
+	// For output images, you should ensure you leave the image as the TOP_OutputTextureInfo::finalLayout you provided.
 	VkImageLayout			layout;
 
 	// The subresource range for the image

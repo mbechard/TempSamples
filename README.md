@@ -15,6 +15,7 @@ TouchDesigner custom operator samples, built with [CMake](https://cmake.org/) 4.
 | [SimpleShapesPOP](SimpleShapesPOP) | POP | |
 | [SimpleShapesSOP](SimpleShapesSOP) | SOP | |
 | [VulkanPOP](VulkanPOP) | POP | Vulkan SDK 1.4+ |
+| [VulkanTOP](VulkanTOP) | TOP | Vulkan SDK 1.4+ |
 | [VulkanTexturePanelCOMP](VulkanTexturePanelCOMP) | COMP | TouchDesigner's Python, Vulkan SDK 1.2+ |
 
 ## Building
@@ -60,7 +61,9 @@ CUDA 13 supports GPUs from the Turing generation (GeForce GTX 16 / RTX 20 series
 
 VulkanTexturePanelCOMP needs the [Vulkan SDK](https://vulkan.lunarg.com/), found through the `VULKAN_SDK` environment variable the SDK installer sets (or `Vulkan_ROOT`). By default it only uses the Vulkan headers and resolves entry points at runtime from TouchDesigner's Vulkan; `-DTD_VULKAN_DISPATCH=LOADER` links the Vulkan loader instead (see the comments in its `CMakeLists.txt`).
 
-VulkanPOP needs Vulkan SDK 1.4 or newer: it uses the SDK's headers (`vulkan.hpp`) and its `glslangValidator`, which compiles the sample's compute shaders (`VulkanPOP/shaders/*.comp`) to SPIR-V during the build; the SPIR-V is embedded in the plugin. It doesn't link the Vulkan loader: all Vulkan calls go through the `vkGetInstanceProcAddr` TouchDesigner provides. It works the same as MetalPOP, with its GPU work recorded into a command buffer TouchDesigner provides (`POP_VulkanCommandRecorder`).
+VulkanPOP needs Vulkan SDK 1.4 or newer: it uses the SDK's headers (`vulkan.hpp`) and its `glslangValidator`, which compiles the sample's compute shaders (`VulkanPOP/*.comp`) to SPIR-V during the build; the SPIR-V is embedded in the plugin. It doesn't link the Vulkan loader: all Vulkan calls go through the `vkGetInstanceProcAddr` TouchDesigner provides. It works the same as MetalPOP, with its GPU work recorded into a command buffer TouchDesigner provides (`POP_VulkanCommandRecorder`).
+
+VulkanTOP has the same requirements and gives the same output as MetalTOP, using `TOP_ExecuteMode::Vulkan`. It renders a full-screen triangle into the output image (as a color attachment, so any renderable pixel format works) rather than writing it from a compute shader, and maps the input's mono, mono+alpha and alpha-only formats with the image view's component swizzle. Its shaders (`VulkanTOP/*.vert`, `*.frag`, `AnimatedColor.glsl`) are compiled to SPIR-V during the build.
 
 ## Adding a sample
 
