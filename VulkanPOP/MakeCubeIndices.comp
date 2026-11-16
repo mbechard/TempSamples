@@ -1,0 +1,28 @@
+// Writes the index buffer of the cube MakeCube.comp creates: 6 quads, 4 indices
+// each, into the 8 shared corner points. Compiled to SPIR-V at build time
+// (see CMakeLists.txt) and embedded in the plugin.
+#version 450
+
+layout(local_size_x = 24) in;
+
+layout(std430, set = 0, binding = 0) writeonly buffer Indices { uint indices[]; };
+
+// Corner i of the cube is at (x, y, z) = (bit0, bit1, bit2) mapped to -0.5 / +0.5, so
+//   0(-,-,-) 1(+,-,-) 2(-,+,-) 3(+,+,-) 4(-,-,+) 5(+,-,+) 6(-,+,+) 7(+,+,+)
+// Each quad is counter-clockwise when viewed from outside the cube.
+const uint CubeIndices[24] = uint[24](
+	0, 2, 3, 1,		// -Z
+	4, 5, 7, 6,		// +Z
+	0, 4, 6, 2,		// -X
+	1, 3, 7, 5,		// +X
+	0, 1, 5, 4,		// -Y
+	2, 6, 7, 3		// +Y
+);
+
+void main()
+{
+	const uint id = gl_GlobalInvocationID.x;
+	if (id >= 24)
+		return;
+	indices[id] = CubeIndices[id];
+}
