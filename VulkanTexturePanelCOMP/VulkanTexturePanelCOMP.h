@@ -27,6 +27,7 @@
 #include <vulkan/vulkan.hpp>
 
 #include <COMP_CPlusPlusPanelBase.h>
+#include <memory>
 #include <vector>
 #include <string>
 

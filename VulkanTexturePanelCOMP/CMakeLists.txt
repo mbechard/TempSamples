@@ -56,12 +56,6 @@ if(WIN32)
 	# VK_KHR_external_memory_win32 / external_semaphore_win32 (shared handles).
 	# vulkan.h then includes <windows.h>, so keep min/max macros out of C++ code.
 	target_compile_definitions(TDVulkan INTERFACE VK_USE_PLATFORM_WIN32_KHR)
-elseif(APPLE)
-	# VK_EXT_metal_objects: import/export MTLTexture / MTLSharedEvent, which is
-	# how Vulkan output reaches TD's Metal execute mode. The plugin source is
-	# compiled as Objective-C++ (see td_add_custom_op), so vulkan_metal.h gets
-	# real id<MTL...> types.
-	target_compile_definitions(TDVulkan INTERFACE VK_USE_PLATFORM_METAL_EXT)
 endif()
 
 # -----------------------------------------------------------------------------

@@ -559,7 +559,7 @@ public:
 
 protected:
 	virtual void
-	dealloc()
+	dealloc() override
 	{
 		delete this;
 	}
