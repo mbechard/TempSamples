@@ -206,6 +206,8 @@ VulkanTexturePanelCOMP::mouseEvent(const COMP_PanelMouseEvent& mouse, void*)
 		{
 			switch (mouse.button)
 			{
+				default:
+					break;
 				case COMP_PanelMouseButton::Left:
 					myMouseLeftButton = state;
 					break;
@@ -226,6 +228,8 @@ VulkanTexturePanelCOMP::mouseEvent(const COMP_PanelMouseEvent& mouse, void*)
 		};
 	switch (mouse.action)
 	{
+		default:
+			break;
 		case COMP_PanelMouseAction::Down:
 			setPosition();
 			setState(1.0f);
@@ -246,6 +250,8 @@ VulkanTexturePanelCOMP::keyEvent(const COMP_PanelKeyEvent& key, void* reserved1)
 {
 	switch (key.action)
 	{
+		default:
+			break;
 		case COMP_KeyEventAction::Down:
 		{
 			std::string s;
